@@ -12,9 +12,9 @@ function App() {
     setLoading(true);
     setError(null);
     try {
-      const resp = await fetch(`/search?item=${encodeURIComponent(item)}`);
+      const resp = await fetch(`/api/search?item=${encodeURIComponent(item)}`);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
-      if (!resp.ok) throw new Error(data.error || "Request failed");
       setResults(data.results);
     } catch (e) {
       setError(e.message);

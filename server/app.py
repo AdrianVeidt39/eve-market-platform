@@ -14,9 +14,9 @@ app.after_request(_add_cors_headers)
 service = MarketService()
 
 
-@app.route("/api/market")
-@app.route("/search")
-def market() -> tuple:
+@app.get("/api/search")
+@app.get("/search")
+def search() -> tuple:
     item = request.args.get("item") or request.args.get("q")
     if not item:
         return jsonify({"error": "Missing item parameter"}), 400
