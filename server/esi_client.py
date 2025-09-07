@@ -1,13 +1,16 @@
-"""ESI API client with throttling and caching."""
+"""ESI API client with throttling, caching and connection checks."""
+import logging
 import time
 from typing import Any, Dict, List, Optional
 
 import requests
 import requests_cache
-from requests import HTTPError
+from requests import HTTPError, RequestException
 
 # Cache responses for one hour to avoid unnecessary calls
 requests_cache.install_cache("esi_cache", expire_after=3600)
+
+logger = logging.getLogger(__name__)
 
 
 class ESIClient:
@@ -31,14 +34,37 @@ class ESIClient:
         for attempt in range(retries):
             self._throttle()
             headers = {"User-Agent": self.USER_AGENT}
-            response = requests.get(f"{self.BASE_URL}{endpoint}", params=params, headers=headers, timeout=30)
+            try:
+                response = requests.get(
+                    f"{self.BASE_URL}{endpoint}",
+                    params=params,
+                    headers=headers,
+                    timeout=30,
+                )
+            except RequestException as exc:
+                logger.error("ESI connection error on %s: %s", endpoint, exc)
+                backoff = 2 ** attempt
+                time.sleep(backoff)
+                continue
             if response.status_code in (420, 429, 503):
+                logger.warning(
+                    "ESI rate limited (status %s) on %s", response.status_code, endpoint
+                )
                 backoff = 2 ** attempt
                 time.sleep(backoff)
                 continue
             response.raise_for_status()
+            logger.info("ESI GET %s params=%s", endpoint, params)
             return response.json()
         raise RuntimeError(f"ESI request failed: {endpoint}")
+
+    def is_online(self) -> bool:
+        """Check whether the ESI API is reachable."""
+        try:
+            self._get("/status/")
+        except Exception:
+            return False
+        return True
 
     def search_item(self, name: str) -> Optional[int]:
         """Return the type ID for an item name using a partial match."""

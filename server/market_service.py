@@ -9,6 +9,8 @@ class MarketService:
         self.client = client or ESIClient()
 
     def market_data(self, item_name: str) -> Dict[str, Any]:
+        if not self.client.is_online():
+            return {"error": "ESI API unavailable"}
         type_id = self.client.search_item(item_name)
         if not type_id:
             return {"error": "Item not found"}
