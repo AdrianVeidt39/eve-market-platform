@@ -23,7 +23,7 @@ Then open `http://localhost:5000` in a modern browser.
 
 ## Features
 
-- Search any market item by name.
+- Search any market item by name using partial matches.
 - Shows regions with sell orders, minimum price, total volume and best system.
 - Client-side filters for volume, price and system name.
 - Caches API responses and throttles requests to respect ESI limits.

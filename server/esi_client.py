@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 
 import requests
 import requests_cache
+from requests import HTTPError
 
 # Cache responses for one hour to avoid unnecessary calls
 requests_cache.install_cache("esi_cache", expire_after=3600)
@@ -40,8 +41,16 @@ class ESIClient:
         raise RuntimeError(f"ESI request failed: {endpoint}")
 
     def search_item(self, name: str) -> Optional[int]:
-        """Return the type ID for an item name."""
-        data = self._get("/search/", {"categories": "inventory_type", "search": name, "strict": True})
+        """Return the type ID for an item name using a partial match."""
+        try:
+            data = self._get(
+                "/search/",
+                {"categories": "inventory_type", "search": name, "strict": False},
+            )
+        except HTTPError as exc:  # 404 means no matches
+            if exc.response is not None and exc.response.status_code == 404:
+                return None
+            raise
         ids: List[int] = data.get("inventory_type", [])
         return ids[0] if ids else None
 
