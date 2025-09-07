@@ -7,8 +7,9 @@ service = MarketService()
 
 
 @app.route("/api/market")
+@app.route("/search")
 def market() -> tuple:
-    item = request.args.get("item")
+    item = request.args.get("item") or request.args.get("q")
     if not item:
         return jsonify({"error": "Missing item parameter"}), 400
     data = service.market_data(item)
