@@ -1,16 +1,42 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>EVE Market Explorer</title>
+    <title>EVE Industrial</title>
     <link rel="stylesheet" href="styles.css" />
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
   </head>
   <body>
-    <div id="root"></div>
-    <script type="text/babel" src="app.js"></script>
+    <h1>EVE Industrial - Análisis de mercado</h1>
+    <section id="filters">
+      <label>Región:
+        <select id="region"></select>
+      </label>
+      <label>Constelación:
+        <select id="constellation" disabled></select>
+      </label>
+      <label>Sistema:
+        <select id="system" disabled></select>
+      </label>
+      <label>Producto:
+        <input id="product" placeholder="Antimatter Charge" />
+      </label>
+      <button id="search">Consultar mercado</button>
+    </section>
+    <section class="table-container">
+      <table id="results">
+        <thead>
+          <tr>
+            <th>Estación</th>
+            <th>Precio</th>
+            <th>Volumen</th>
+            <th>Rango</th>
+            <th>Duración</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+    <script src="app.js"></script>
   </body>
 </html>

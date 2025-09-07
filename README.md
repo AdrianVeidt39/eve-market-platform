@@ -1,30 +1,11 @@
 # EVE Market Explorer
 
-Local web application to query the EVE Online market and display availability by region.
+Static client to browse the EVE Online market by region, constellation and system.
 
-## Requirements
+## Usage
 
-- Python 3.8+
-- Node.js is **not** required; the frontend uses CDN scripts.
+Open `client/index.html` in a modern browser. The page loads region data from the public ESI API and guides you through selecting a constellation and system. Provide a product name (or leave empty for **Antimatter Charge**) and press **Consultar mercado** to list sell orders for every public station in the chosen system. Stations with no orders are highlighted.
 
-## Installation
+## Development Notes
 
-```bash
-pip install -r requirements.txt
-```
-
-## Running
-
-```bash
-python server/app.py
-```
-
-Then open `http://localhost:5000` in a modern browser.
-
-## Features
-
-- Search any market item by name using partial matches.
-- Shows regions with sell orders, minimum price, total volume and best system.
-- Client-side filters for volume, price and system name.
-- Caches API responses and throttles requests to respect ESI limits.
-- Handles API errors with clear messages.
+The client caches API responses and throttles requests (~300 ms between calls) to respect ESI rate limits. Responses that fail with 420/429/503 are retried with exponential backoff. The previous Flask backend remains in `server/` but is not required for the static site.
