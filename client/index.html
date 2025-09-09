@@ -149,6 +149,33 @@ const fmtPrice = n=>Number(n).toLocaleString("en-US",{maximumFractionDigits:2});
 const fmtInt = n=>Number(n).toLocaleString("en-US",{maximumFractionDigits:0});
 const sleep = ms=>new Promise(r=>setTimeout(r,ms));
 
+const CACHE_TTL = 24 * 60 * 60 * 1000; // 24h
+
+function getCache(key){
+  try{
+    const raw=localStorage.getItem(key);
+    if(!raw) return null;
+    const {ts,data}=JSON.parse(raw);
+    if(Date.now()-ts < CACHE_TTL) return data;
+    localStorage.removeItem(key);
+  }catch(e){
+    localStorage.removeItem(key);
+  }
+  return null;
+}
+
+function setCache(key,data){
+  localStorage.setItem(key,JSON.stringify({ts:Date.now(),data}));
+}
+
+function clearCache(){
+  Object.keys(localStorage).forEach(k=>{
+    if(k.startsWith('esi.')) localStorage.removeItem(k);
+  });
+}
+
+window.clearEsiCache=clearCache;
+
 async function fetchWithRetry(url, opts = {}, maxRetries = 3) {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const res = await fetch(url, opts);
@@ -186,34 +213,62 @@ let nameCache=new Map();
 let currentSort={k:"type_name",dir:1};
 
 async function loadRegions(){
+  const cached=getCache('esi.regions');
+  const sel=j('#region');
+  if(cached){
+    regions=cached;
+    sel.innerHTML = `<option value="" disabled selected>Selecciona región…</option>` + regions.map(r=>`<option value="${r.id}">${r.name}</option>`).join("");
+    return;
+  }
   const {data:ids}=await get(`${ESI}/universe/regions/`);
   const names=await post(`${ESI}/universe/names/`,ids);
   regions=names.filter(x=>x.category==="region").map(x=>({id:x.id,name:x.name})).sort((a,b)=>a.name.localeCompare(b.name));
-  const sel=j('#region');
+  setCache('esi.regions',regions);
   sel.innerHTML = `<option value="" disabled selected>Selecciona región…</option>` + regions.map(r=>`<option value="${r.id}">${r.name}</option>`).join("");
 }
 async function onRegionChange(){
   resetLower();
   const regionId=+j('#region').value;
+  const cacheKey=`esi.constellations.${regionId}`;
+  const sel=j('#constellation');
+  const cached=getCache(cacheKey);
+  if(cached){
+    constellations=cached;
+    sel.innerHTML = `<option value="" disabled selected>Selecciona constelación…</option>` + constellations.map(c=>`<option value="${c.id}">${c.name}</option>`).join("");
+    sel.disabled=false;
+    return;
+  }
   const {data:regionDetail}=await get(`${ESI}/universe/regions/${regionId}/`);
   const names=await post(`${ESI}/universe/names/`,regionDetail.constellations);
   constellations=names.filter(x=>x.category==="constellation").map(x=>({id:x.id,name:x.name})).sort((a,b)=>a.name.localeCompare(b.name));
-  const sel=j('#constellation');
   sel.innerHTML = `<option value="" disabled selected>Selecciona constelación…</option>` + constellations.map(c=>`<option value="${c.id}">${c.name}</option>`).join("");
   sel.disabled=false;
+  setCache(cacheKey,constellations);
 }
 async function onConstellationChange(){
   j('#queryBtn').disabled=true;
   systems=[]; stationsInConstellation=new Set(); stationToSystem=new Map(); systemNameMap=new Map();
   const consId=+j('#constellation').value;
+  const cacheKey=`esi.systems.${consId}`;
+  const cached=getCache(cacheKey);
+  const sysSel=j('#fSystem');
+  if(cached){
+    systems=cached.systems;
+    stationToSystem=new Map(cached.stationMap);
+    stationsInConstellation=new Set(cached.stationMap.map(p=>p[0]));
+    systemNameMap=new Map(systems.map(s=>[s.id,s.name]));
+    sysSel.innerHTML = `<option value="all">Todos</option>` + systems.map(s=>`<option value="${s.id}">${s.name}</option>`).join("");
+    j('#queryBtn').disabled=false;
+    return;
+  }
   const {data:cons}=await get(`${ESI}/universe/constellations/${consId}/`);
   const sysNames=await post(`${ESI}/universe/names/`,cons.systems);
   systems=sysNames.filter(x=>x.category==="solar_system").map(x=>({id:x.id,name:x.name})).sort((a,b)=>a.name.localeCompare(b.name));
   systems.forEach(s=>systemNameMap.set(s.id,s.name));
   for(const s of systems){ const {data:sysd}=await get(`${ESI}/universe/systems/${s.id}/`); const st=sysd.stations||[]; for(const stid of st){ stationsInConstellation.add(stid); stationToSystem.set(stid,s.id);} await sleep(30); }
-  const sysSel=j('#fSystem');
   sysSel.innerHTML = `<option value="all">Todos</option>` + systems.map(s=>`<option value="${s.id}">${s.name}</option>`).join("");
   j('#queryBtn').disabled=false;
+  setCache(cacheKey,{systems,stationMap:[...stationToSystem.entries()]});
 }
 function resetLower(){ j('#constellation').disabled=true; j('#constellation').innerHTML=''; j('#queryBtn').disabled=true; stationsInConstellation=new Set(); stationToSystem=new Map(); systemNameMap=new Map(); ordersRaw=[]; render(); }
 
