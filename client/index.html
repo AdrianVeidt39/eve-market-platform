@@ -40,8 +40,12 @@
   @keyframes spin{to{transform:rotate(360deg)}}
   .muted{color:var(--muted)}
   .danger{color:var(--danger)}
-  .k{color:#a5c8ff}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px}
+  .kpi{background:var(--chip);border:1px solid var(--border);border-radius:12px;padding:12px;text-align:center}
+  .kpi .num{font-size:20px;font-weight:700;color:var(--accent2)}
 </style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-box-and-violin-plot@4"></script>
 </head>
 <body>
   <div class="wrap">
@@ -87,6 +91,7 @@
           <span class="chip"><span id="pagesInfo">0 / 0 páginas</span></span>
         </div>
         <div class="right">
+          <button id="chartsBtn" class="btn" disabled>Generar gráficas</button>
           <button id="exportBtn" class="btn" disabled>Exportar CSV</button>
         </div>
       </div>
@@ -95,7 +100,7 @@
           <thead>
             <tr class="head">
               <th class="sortable" data-k="type_name">Tipo</th>
-              <th class="sortable k" data-k="price">Precio</th>
+              <th class="sortable" data-k="price">Precio</th>
               <th class="sortable" data-k="volume_remain">Volumen</th>
               <th class="sortable" data-k="min_volume">Mín.</th>
               <th class="sortable" data-k="range">Rango</th>
@@ -139,6 +144,16 @@
         </table>
       </div>
       <p id="systemNote" class="note" style="display:none"></p>
+    </div>
+    <div id="analytics" class="card" style="margin-top:16px;display:none">
+      <div class="section-title">Visualizaciones</div>
+      <div id="kpiPanel" class="kpis"></div>
+      <canvas id="chartVol"></canvas>
+      <canvas id="chartVal"></canvas>
+      <canvas id="chartDist"></canvas>
+      <canvas id="chartHeat"></canvas>
+      <canvas id="chartScatter"></canvas>
+      <canvas id="chartAge"></canvas>
     </div>
   </div>
 
@@ -221,6 +236,7 @@ let systemNameMap=new Map();
 let ordersRaw=[];
 let nameCache=new Map();
 let currentSort={k:"type_name",dir:1};
+let charts={};
 
 async function loadRegions(){
   const cached=getCache('esi.regions');
@@ -262,7 +278,7 @@ async function onConstellationChange(){
   const cacheKey=`esi.systems.${consId}`;
   const cached=getCache(cacheKey);
   const sysSel=j('#fSystem');
-  if(cached){
+  if(cached && cached.systems && cached.systems[0] && cached.systems[0].pos){
     systems=cached.systems;
     stationToSystem=new Map(cached.stationMap);
     stationsInConstellation=new Set(cached.stationMap.map(p=>p[0]));
@@ -273,9 +289,14 @@ async function onConstellationChange(){
   }
   const {data:cons}=await get(`${ESI}/universe/constellations/${consId}/`);
   const sysNames=await post(`${ESI}/universe/names/`,cons.systems);
-  systems=sysNames.filter(x=>x.category==="solar_system").map(x=>({id:x.id,name:x.name})).sort((a,b)=>a.name.localeCompare(b.name));
+  systems=sysNames.filter(x=>x.category==="solar_system").map(x=>({id:x.id,name:x.name,pos:{x:0,y:0}})).sort((a,b)=>a.name.localeCompare(b.name));
   systems.forEach(s=>systemNameMap.set(s.id,s.name));
-  for(const s of systems){ const {data:sysd}=await get(`${ESI}/universe/systems/${s.id}/`); const st=sysd.stations||[]; for(const stid of st){ stationsInConstellation.add(stid); stationToSystem.set(stid,s.id);} await sleep(30); }
+  for(const s of systems){
+    const {data:sysd}=await get(`${ESI}/universe/systems/${s.id}/`);
+    const st=sysd.stations||[];
+    s.pos={x:sysd.position.x,y:sysd.position.y};
+    for(const stid of st){ stationsInConstellation.add(stid); stationToSystem.set(stid,s.id);} await sleep(30);
+  }
   sysSel.innerHTML = `<option value="all">Todos</option>` + systems.map(s=>`<option value="${s.id}">${s.name}</option>`).join("");
   j('#queryBtn').disabled=false;
   setCache(cacheKey,{systems,stationMap:[...stationToSystem.entries()]});
@@ -302,14 +323,79 @@ function filterAndPush(arr){ for(const o of arr){ if(stationsInConstellation.has
 function currentFilters(){ return { type:j('#fType').value.trim().toLowerCase(), pmin:parseFloat(j('#fPriceMin').value||'NaN'), pmax:parseFloat(j('#fPriceMax').value||'NaN'), vmin:parseInt(j('#fVol').value||'NaN'), mmin:parseInt(j('#fMin').value||'NaN'), range:j('#fRange').value, system:j('#fSystem').value, station:j('#fStation').value, issued:j('#fIssued').value, duration:j('#fDuration').value }; }
 function mapOrder(o){ const sysId=stationToSystem.get(o.location_id); return { type_id:o.type_id, type_name:nameCache.get(o.type_id)||o.type_id, price:o.price, volume_remain:o.volume_remain, min_volume:o.min_volume, range:o.range, station_id:o.location_id, station_name:nameCache.get(o.location_id)||o.location_id, system_id:sysId, system_name:systemNameMap.get(sysId)||sysId, issued:o.issued, duration:o.duration }; }
 function applyFilters(rows,f){ return rows.filter(r=>{ if(f.type&&!(""+r.type_name).toLowerCase().includes(f.type))return false; if(!Number.isNaN(f.pmin)&&r.price<f.pmin)return false; if(!Number.isNaN(f.pmax)&&r.price>f.pmax)return false; if(!Number.isNaN(f.vmin)&&r.volume_remain<f.vmin)return false; if(!Number.isNaN(f.mmin)&&r.min_volume<f.mmin)return false; if(f.range!=='all'&&(""+r.range)!==f.range)return false; if(f.system!=='all'&&(""+r.system_id)!==f.system)return false; if(f.station!=='all'&&(""+r.station_id)!==f.station)return false; if(f.issued!=='all'){ const d=isoDaysAgo(r.issued); if(f.issued==='24h'&&d>1)return false; if(f.issued==='7d'&&d>7)return false; if(f.issued==='30d'&&d>30)return false;} if(f.duration!=='all'&&(""+r.duration)!==(f.duration))return false; return true; }); }
-function render(){ const tbody=j('#ordersTable tbody'); let rows=ordersRaw.map(mapOrder); const f=currentFilters(); rows=applyFilters(rows,f); rows=sortBy(rows,currentSort.k,currentSort.dir); j('#ordersCount').textContent=fmtInt(rows.length); if(!ordersRaw.length) j('#pagesInfo').textContent='0 / 0 páginas'; j('#exportBtn').disabled=rows.length===0; tbody.innerHTML=rows.map(r=>`<tr><td>${escapeHtml(r.type_name)}</td><td class="k">${fmtPrice(r.price)}</td><td>${fmtInt(r.volume_remain)}</td><td>${fmtInt(r.min_volume)}</td><td>${r.range}</td><td>${escapeHtml(r.system_name)}</td><td>${escapeHtml(r.station_name)}</td><td><span class="muted" title="${r.issued}">${new Date(r.issued).toLocaleString()}</span></td><td>${r.duration}</td></tr>`).join(''); }
+function getFilteredRows(){ let rows=ordersRaw.map(mapOrder); const f=currentFilters(); rows=applyFilters(rows,f); return sortBy(rows,currentSort.k,currentSort.dir); }
+function render(){ const tbody=j('#ordersTable tbody'); const rows=getFilteredRows(); j('#ordersCount').textContent=fmtInt(rows.length); if(!ordersRaw.length) j('#pagesInfo').textContent='0 / 0 páginas'; const disable=rows.length===0; j('#exportBtn').disabled=disable; j('#chartsBtn').disabled=disable; tbody.innerHTML=rows.map(r=>`<tr><td>${escapeHtml(r.type_name)}</td><td>${fmtPrice(r.price)}</td><td>${fmtInt(r.volume_remain)}</td><td>${fmtInt(r.min_volume)}</td><td>${r.range}</td><td>${escapeHtml(r.system_name)}</td><td>${escapeHtml(r.station_name)}</td><td><span class="muted" title="${r.issued}">${new Date(r.issued).toLocaleString()}</span></td><td>${r.duration}</td></tr>`).join(''); }
 function escapeHtml(s){ return (""+s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[m])); }
 function exportCSV(){ let rows=ordersRaw.map(mapOrder); rows=applyFilters(rows,currentFilters()); rows=sortBy(rows,currentSort.k,currentSort.dir); const headers=["type_name","price","volume_remain","min_volume","range","system_name","station_name","issued","duration"]; const csv=[headers.join(",")].concat(rows.map(r=>[`"${(""+r.type_name).replace(/"/g,'""')}"`,r.price,r.volume_remain,r.min_volume,r.range,`"${(""+r.system_name).replace(/"/g,'""')}"`,`"${(""+r.station_name).replace(/"/g,'""')}"`,r.issued,r.duration].join(","))).join("\n"); const blob=new Blob([csv],{type:"text/csv;charset=utf-8"}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='ordenes_eve.csv'; a.click(); URL.revokeObjectURL(url); }
+
+function generateCharts(){
+  const rows=getFilteredRows();
+  if(!rows.length){ alert('No hay datos para graficar'); return; }
+  j('#analytics').style.display='block';
+  // KPIs
+  let totalVol=0,totalISK=0; const items=new Set();
+  let maxR=rows[0],minR=rows[0];
+  for(const r of rows){
+    totalVol+=r.volume_remain;
+    totalISK+=r.price*r.volume_remain;
+    items.add(r.type_id);
+    if(r.price>maxR.price) maxR=r;
+    if(r.price<minR.price) minR=r;
+  }
+  j('#kpiPanel').innerHTML=`
+    <div class="kpi"><div class="num">${fmtInt(totalVol)}</div><div>Volumen total</div></div>
+    <div class="kpi"><div class="num">${fmtPrice(totalISK)}</div><div>ISK total</div></div>
+    <div class="kpi"><div class="num">${items.size}</div><div>Ítems únicos</div></div>
+    <div class="kpi"><div class="num">${escapeHtml(maxR.type_name)}</div><div>Más caro (${fmtPrice(maxR.price)})</div></div>
+    <div class="kpi"><div class="num">${escapeHtml(minR.type_name)}</div><div>Más barato (${fmtPrice(minR.price)})</div></div>`;
+
+  for(const k in charts){ charts[k].destroy(); }
+  charts={};
+
+  const volMap=new Map();
+  const valMap=new Map();
+  const priceMap=new Map();
+  const sysCount=new Map();
+  const scatterPV=[];
+  const days=[];
+  for(const r of rows){
+    volMap.set(r.type_name,(volMap.get(r.type_name)||0)+r.volume_remain);
+    valMap.set(r.type_name,(valMap.get(r.type_name)||0)+r.volume_remain*r.price);
+    if(!priceMap.has(r.type_name)) priceMap.set(r.type_name,[]);
+    priceMap.get(r.type_name).push(r.price);
+    sysCount.set(r.system_id,(sysCount.get(r.system_id)||0)+1);
+    scatterPV.push({x:r.volume_remain,y:r.price});
+    days.push(Math.floor((Date.now()-new Date(r.issued).getTime())/86400000));
+  }
+
+  const topVol=[...volMap.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10);
+  charts.vol=new Chart(j('#chartVol'),{type:'bar',data:{labels:topVol.map(x=>x[0]),datasets:[{data:topVol.map(x=>x[1]),backgroundColor:'var(--accent)'}]},options:{indexAxis:'y',plugins:{legend:{display:false}}}});
+
+  const topVal=[...valMap.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10);
+  charts.val=new Chart(j('#chartVal'),{type:'bar',data:{labels:topVal.map(x=>x[0]),datasets:[{data:topVal.map(x=>x[1]),backgroundColor:'var(--accent2)'}]},options:{indexAxis:'y',plugins:{legend:{display:false}}}});
+
+  const distItems=[...priceMap.entries()].sort((a,b)=>b[1].length-a[1].length).slice(0,10);
+  charts.dist=new Chart(j('#chartDist'),{type:'boxplot',data:{labels:distItems.map(x=>x[0]),datasets:[{data:distItems.map(x=>x[1]),backgroundColor:'var(--accent)'}]},options:{plugins:{legend:{display:false}}}});
+
+  const sysData=[]; const xs=[],ys=[];
+  systems.forEach(s=>{
+    const c=sysCount.get(s.id)||0;
+    if(c>0 && s.pos){ sysData.push({x:s.pos.x,y:s.pos.y,r:Math.sqrt(c)*3,count:c,label:s.name}); xs.push(s.pos.x); ys.push(s.pos.y); }
+  });
+  if(sysData.length){ const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys); sysData.forEach(d=>{d.x=(d.x-minX)/(maxX-minX); d.y=(d.y-minY)/(maxY-minY);}); }
+  charts.heat=new Chart(j('#chartHeat'),{type:'bubble',data:{datasets:[{data:sysData,backgroundColor:'var(--accent)'}]},options:{scales:{x:{display:false},y:{display:false}},plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${ctx.raw.label}: ${ctx.raw.count} órdenes`}}}}});
+
+  charts.scatter=new Chart(j('#chartScatter'),{type:'scatter',data:{datasets:[{data:scatterPV,backgroundColor:'var(--accent2)'}]},options:{scales:{x:{title:{display:true,text:'Volumen'}},y:{title:{display:true,text:'Precio'}}}}});
+
+  const maxDay=Math.max(...days,0); const bins=Array.from({length:Math.min(maxDay+1,30)},()=>0); days.forEach(d=>{ if(d<bins.length) bins[d]++; else bins[bins.length-1]++; });
+  charts.age=new Chart(j('#chartAge'),{type:'bar',data:{labels:bins.map((_,i)=>i===bins.length-1?`${i}+`:String(i)),datasets:[{data:bins,backgroundColor:'var(--accent)'}]},options:{plugins:{legend:{display:false}},scales:{x:{title:{display:true,text:'Días desde emisión'}},y:{title:{display:true,text:'Órdenes'}}}}});
+}
 
 j('#region').addEventListener('change',onRegionChange);
 j('#constellation').addEventListener('change',onConstellationChange);
 j('#queryBtn').addEventListener('click',queryMarket);
 j('#exportBtn').addEventListener('click',exportCSV);
+j('#chartsBtn').addEventListener('click',generateCharts);
 for(const id of ['fType','fPriceMin','fPriceMax','fVol','fMin','fRange','fSystem','fStation','fIssued','fDuration']){ j('#'+id).addEventListener('input',render); j('#'+id).addEventListener('change',render); }
 document.querySelectorAll('thead tr.head th.sortable').forEach(th=>{ th.addEventListener('click',()=>{ const k=th.dataset.k; if(!k) return; if(currentSort.k===k){ currentSort.dir*=-1; } else { currentSort.k=k; currentSort.dir=1; } render(); }); });
 
