@@ -196,6 +196,7 @@ function clearCache(){
 window.clearEsiCache=clearCache;
 
 async function fetchWithRetry(url, opts = {}, maxRetries = 3) {
+  opts.headers = { ...(opts.headers || {}), "User-Agent": "EVE Market Explorer (contacto@example.com)" };
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const res = await fetch(url, opts);
     const remain = Number(res.headers.get("X-Esi-Error-Limit-Remain") || "100");
@@ -213,7 +214,7 @@ async function fetchWithRetry(url, opts = {}, maxRetries = 3) {
 }
 
 async function get(url, opts = {}, retries = 3) {
-  const res = await fetchWithRetry(url, { headers: { "Accept-Language": "en" }, ...opts }, retries);
+  const res = await fetchWithRetry(url, { headers: { "Accept-Language": "en", "User-Agent": "EVE Market Explorer (contacto@example.com)" }, ...opts }, retries);
   if (!res.ok) throw new Error(`HTTP ${res.status} ${url}`);
   const pages = Number(res.headers.get("X-Pages") || "0");
   return { data: await res.json(), pages };
@@ -222,7 +223,7 @@ async function get(url, opts = {}, retries = 3) {
 async function post(url, body, retries = 3) {
   const res = await fetchWithRetry(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "User-Agent": "EVE Market Explorer (contacto@example.com)" },
     body: JSON.stringify(body),
   }, retries);
   if (!res.ok) throw new Error(`HTTP ${res.status} ${url}`);
