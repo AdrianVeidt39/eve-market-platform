@@ -149,6 +149,8 @@ const fmtPrice = n=>Number(n).toLocaleString("en-US",{maximumFractionDigits:2});
 const fmtInt = n=>Number(n).toLocaleString("en-US",{maximumFractionDigits:0});
 const sleep = ms=>new Promise(r=>setTimeout(r,ms));
 
+const LOG_ESI = true; // Desactiva en producción
+
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 24h
 
 function getCache(key){
@@ -179,9 +181,17 @@ window.clearEsiCache=clearCache;
 async function fetchWithRetry(url, opts = {}, maxRetries = 3) {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const res = await fetch(url, opts);
-    if (![420, 429, 503].includes(res.status)) return res;
+    const remain = Number(res.headers.get("X-Esi-Error-Limit-Remain") || "100");
+    const reset = Number(res.headers.get("X-Esi-Error-Limit-Reset") || "0");
+    if (LOG_ESI) console.log(`[ESI] ${url} -> ${res.status} (try ${attempt}/${maxRetries})`);
+    if (![420, 429, 503].includes(res.status)) {
+      if (remain <= 1) await sleep(reset * 1000);
+      return res;
+    }
     if (attempt === maxRetries) throw new Error(`HTTP ${res.status} ${url}`);
-    await sleep(500 * 2 ** attempt);
+    const delay = remain <= 1 ? reset * 1000 : 500 * 2 ** attempt;
+    if (LOG_ESI) console.warn(`[ESI] retry ${url} -> ${res.status}; waiting ${delay}ms`);
+    await sleep(delay);
   }
 }
 
