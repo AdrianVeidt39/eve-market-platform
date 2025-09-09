@@ -149,8 +149,22 @@ const fmtPrice = n=>Number(n).toLocaleString("en-US",{maximumFractionDigits:2});
 const fmtInt = n=>Number(n).toLocaleString("en-US",{maximumFractionDigits:0});
 const sleep = ms=>new Promise(r=>setTimeout(r,ms));
 
-async function get(url,opts={}){ const res=await fetch(url,{headers:{"Accept-Language":"en"},...opts}); if(!res.ok) throw new Error(`HTTP ${res.status} ${url}`); const pages=Number(res.headers.get("X-Pages")||"0"); return {data:await res.json(),pages}; }
-async function post(url,body){ const res=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}); if(!res.ok) throw new Error(`HTTP ${res.status} ${url}`); return res.json(); }
+async function get(url, opts = {}) {
+  const res = await fetch(url, { headers: { "Accept-Language": "en" }, ...opts });
+  if (!res.ok) throw new Error(`HTTP ${res.status} ${url}`);
+  const pages = Number(res.headers.get("X-Pages") || "0");
+  return { data: await res.json(), pages };
+}
+
+async function post(url, body) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status} ${url}`);
+  return res.json();
+}
 function sortBy(arr,k,dir=1){ return arr.sort((a,b)=>{const va=a[k],vb=b[k]; if(typeof va==="number"&&typeof vb==="number") return (va-vb)*dir; return (""+va).localeCompare(""+vb)*dir;}); }
 function isoDaysAgo(iso){ return (Date.now()-new Date(iso).getTime())/86400000; }
 
