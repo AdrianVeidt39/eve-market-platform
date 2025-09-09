@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>EVE Industrial · Análisis de mercados públicos</title>
+<style>
+  :root{ --bg:#0f1620; --panel:#141c27; --muted:#8aa0b3; --text:#e6eef7; --accent:#30a3ff; --accent2:#00d1b2; --danger:#ff5555; --border:#223247; --chip:#1b2636; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,Segoe UI,Roboto,Arial}
+  .wrap{max-width:1200px;margin:24px auto;padding:0 16px}
+  h1{display:flex;align-items:center;gap:10px;font-size:22px;margin:0 0 6px}
+  h1::before{content:"";display:inline-block;width:8px;height:8px;background:var(--accent);border-radius:50%}
+  .subtitle{color:var(--muted);margin:0 0 18px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px 16px}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .field{display:flex;flex-direction:column;gap:6px}
+  label{color:var(--muted);font-size:12px}
+  select, input[type="text"], input[type="number"]{width:100%;background:#0c131c;border:1px solid var(--border);color:var(--text);border-radius:10px;padding:10px 12px;outline:none}
+  select:disabled{opacity:.6}
+  .controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px}
+  .btn{background:var(--accent);color:#06101b;border:none;border-radius:10px;padding:10px 14px;font-weight:600;cursor:pointer}
+  .btn:disabled{opacity:.6;cursor:not-allowed}
+  .note{color:var(--muted);font-size:12px;margin-top:10px}
+  .section-title{font-weight:700;margin:18px 0 10px}
+  .stats{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:12px}
+  .chip{background:var(--chip);border:1px solid var(--border);padding:6px 10px;border-radius:999px}
+  .table-wrap{overflow:auto;border:1px solid var(--border);border-radius:12px}
+  table{width:100%;border-collapse:collapse;min-width:1080px}
+  thead th{position:sticky;top:0;background:#0e1520;border-bottom:1px solid var(--border);padding:12px;font-size:12px;text-align:left;user-select:none}
+  thead tr.head th{cursor:pointer;top:0;z-index:3}
+  thead tr.filters th{top:44px;z-index:2;background:#0e1520;cursor:default;padding:8px}
+  thead tr.filters input, thead tr.filters select{width:100%;margin:0}
+  .hstack{display:flex;gap:6px}
+  .hstack>*{flex:1 1 0}
+  tbody td{border-top:1px solid var(--border);padding:10px 12px;vertical-align:top}
+  tbody tr:hover{background:#111a27}
+  .right{display:flex;gap:8px;align-items:center;margin-left:auto}
+  .spinner{width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .muted{color:var(--muted)}
+  .danger{color:var(--danger)}
+  .k{color:#a5c8ff}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>EVE Industrial</h1>
+    <p class="subtitle">Análisis de mercados públicos</p>
+
+    <div class="card">
+      <div class="section-title">Filtros</div>
+      <div class="row">
+        <div class="field">
+          <label for="region">Región</label>
+          <select id="region"></select>
+        </div>
+        <div class="field">
+          <label for="constellation">Constelación</label>
+          <select id="constellation" disabled></select>
+        </div>
+      </div>
+      <div class="controls">
+        <div class="field" style="min-width:260px">
+          <label for="detail">Órdenes a mostrar (detalle)</label>
+          <select id="detail">
+            <option value="all">Ambas</option>
+            <option value="sell">Venta</option>
+            <option value="buy">Compra</option>
+          </select>
+        </div>
+        <button id="queryBtn" class="btn" disabled>Consultar mercado</button>
+        <div id="busyHint" class="right muted" style="display:none">
+          <div class="spinner"></div><span>Consultando órdenes del mercado regional…</span>
+        </div>
+      </div>
+      <p class="note">
+        Al abrir sólo se cargan catálogos. Al elegir <b>región</b> se piden sus constelaciones. Al elegir <b>constelación</b> se calcularán los <b> sistemas y estaciones NPC </b> que contiene. La consulta de órdenes sólo ocurre tras pulsar <b>Consultar mercado</b>.
+      </p>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="section-title">Órdenes encontradas</div>
+      <div class="controls">
+        <div class="stats">
+          <span class="chip"><span id="ordersCount">0</span> órdenes</span>
+          <span class="chip"><span id="pagesInfo">0 / 0 páginas</span></span>
+        </div>
+        <div class="right">
+          <button id="exportBtn" class="btn" disabled>Exportar CSV</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table id="ordersTable">
+          <thead>
+            <tr class="head">
+              <th class="sortable" data-k="type_name">Tipo</th>
+              <th class="sortable k" data-k="price">Precio</th>
+              <th class="sortable" data-k="volume_remain">Volumen</th>
+              <th class="sortable" data-k="min_volume">Mín.</th>
+              <th class="sortable" data-k="range">Rango</th>
+              <th class="sortable" data-k="system_name">Sistema</th>
+              <th class="sortable" data-k="station_name">Estación</th>
+              <th class="sortable" data-k="issued">Emitida</th>
+              <th class="sortable" data-k="duration">Duración</th>
+            </tr>
+            <tr class="filters">
+              <th><input id="fType" type="text" placeholder="Tipo (ej. Antimatter)"/></th>
+              <th><div class="hstack"><input id="fPriceMin" type="number" placeholder="Precio mín." step="0.01"/><input id="fPriceMax" type="number" placeholder="Precio máx." step="0.01"/></div></th>
+              <th><input id="fVol" type="number" placeholder="Volumen mín."/></th>
+              <th><input id="fMin" type="number" placeholder="Mín. por orden"/></th>
+              <th>
+                <select id="fRange">
+                  <option value="all">Todos</option>
+                  <option>station</option><option>solarsystem</option><option>region</option>
+                  <option>1</option><option>2</option><option>3</option><option>5</option><option>10</option><option>20</option><option>40</option>
+                </select>
+              </th>
+              <th><select id="fSystem"><option value="all">Todos</option></select></th>
+              <th><select id="fStation"><option value="all">Todas</option></select></th>
+              <th>
+                <select id="fIssued">
+                  <option value="all">Todas</option>
+                  <option value="24h">Últimas 24h</option>
+                  <option value="7d">Últimos 7 días</option>
+                  <option value="30d">Últimos 30 días</option>
+                </select>
+              </th>
+              <th>
+                <select id="fDuration">
+                  <option value="all">Todas</option>
+                  <option>1</option><option>3</option><option>7</option><option>14</option>
+                  <option>30</option><option>60</option><option>90</option>
+                </select>
+              </th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p id="systemNote" class="note" style="display:none"></p>
+    </div>
+  </div>
+
+<script>
+const ESI = "https://esi.evetech.net/latest";
+const j = s=>document.querySelector(s);
+const fmtPrice = n=>Number(n).toLocaleString("en-US",{maximumFractionDigits:2});
+const fmtInt = n=>Number(n).toLocaleString("en-US",{maximumFractionDigits:0});
+const sleep = ms=>new Promise(r=>setTimeout(r,ms));
+
+async function get(url,opts={}){ const res=await fetch(url,{headers:{"Accept-Language":"en"},...opts}); if(!res.ok) throw new Error(`HTTP ${res.status} ${url}`); const pages=Number(res.headers.get("X-Pages")||"0"); return {data:await res.json(),pages}; }
+async function post(url,body){ const res=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}); if(!res.ok) throw new Error(`HTTP ${res.status} ${url}`); return res.json(); }
+function sortBy(arr,k,dir=1){ return arr.sort((a,b)=>{const va=a[k],vb=b[k]; if(typeof va==="number"&&typeof vb==="number") return (va-vb)*dir; return (""+va).localeCompare(""+vb)*dir;}); }
+function isoDaysAgo(iso){ return (Date.now()-new Date(iso).getTime())/86400000; }
+
+let regions=[],constellations=[],systems=[];
+let stationsInConstellation=new Set();
+let stationToSystem=new Map();
+let systemNameMap=new Map();
+let ordersRaw=[];
+let nameCache=new Map();
+let currentSort={k:"type_name",dir:1};
+
+async function loadRegions(){
+  const {data:ids}=await get(`${ESI}/universe/regions/`);
+  const names=await post(`${ESI}/universe/names/`,ids);
+  regions=names.filter(x=>x.category==="region").map(x=>({id:x.id,name:x.name})).sort((a,b)=>a.name.localeCompare(b.name));
+  const sel=j('#region');
+  sel.innerHTML = `<option value="" disabled selected>Selecciona región…</option>` + regions.map(r=>`<option value="${r.id}">${r.name}</option>`).join("");
+}
+async function onRegionChange(){
+  resetLower();
+  const regionId=+j('#region').value;
+  const {data:regionDetail}=await get(`${ESI}/universe/regions/${regionId}/`);
+  const names=await post(`${ESI}/universe/names/`,regionDetail.constellations);
+  constellations=names.filter(x=>x.category==="constellation").map(x=>({id:x.id,name:x.name})).sort((a,b)=>a.name.localeCompare(b.name));
+  const sel=j('#constellation');
+  sel.innerHTML = `<option value="" disabled selected>Selecciona constelación…</option>` + constellations.map(c=>`<option value="${c.id}">${c.name}</option>`).join("");
+  sel.disabled=false;
+}
+async function onConstellationChange(){
+  j('#queryBtn').disabled=true;
+  systems=[]; stationsInConstellation=new Set(); stationToSystem=new Map(); systemNameMap=new Map();
+  const consId=+j('#constellation').value;
+  const {data:cons}=await get(`${ESI}/universe/constellations/${consId}/`);
+  const sysNames=await post(`${ESI}/universe/names/`,cons.systems);
+  systems=sysNames.filter(x=>x.category==="solar_system").map(x=>({id:x.id,name:x.name})).sort((a,b)=>a.name.localeCompare(b.name));
+  systems.forEach(s=>systemNameMap.set(s.id,s.name));
+  for(const s of systems){ const {data:sysd}=await get(`${ESI}/universe/systems/${s.id}/`); const st=sysd.stations||[]; for(const stid of st){ stationsInConstellation.add(stid); stationToSystem.set(stid,s.id);} await sleep(30); }
+  const sysSel=j('#fSystem');
+  sysSel.innerHTML = `<option value="all">Todos</option>` + systems.map(s=>`<option value="${s.id}">${s.name}</option>`).join("");
+  j('#queryBtn').disabled=false;
+}
+function resetLower(){ j('#constellation').disabled=true; j('#constellation').innerHTML=''; j('#queryBtn').disabled=true; stationsInConstellation=new Set(); stationToSystem=new Map(); systemNameMap=new Map(); ordersRaw=[]; render(); }
+
+async function queryMarket(){
+  const regionId=+j('#region').value; const side=j('#detail').value;
+  try{
+    j('#systemNote').style.display='none';
+    if(!stationsInConstellation.size){ j('#systemNote').style.display='block'; j('#systemNote').innerHTML='<span class="danger">Esta constelación no tiene estaciones NPC públicas.</span> ESI no expone órdenes de estructuras sin autenticación.'; ordersRaw=[]; render(); return; }
+    ordersRaw=[]; j('#busyHint').style.display='flex';
+    const first=await get(`${ESI}/markets/${regionId}/orders/?order_type=${side}&page=1`);
+    const totalPages=first.pages||1; filterAndPush(first.data); j('#pagesInfo').textContent=`1 / ${totalPages} páginas`;
+    for(let p=2;p<=totalPages;p++){ const {data}=await get(`${ESI}/markets/${regionId}/orders/?order_type=${side}&page=${p}`); filterAndPush(data); j('#pagesInfo').textContent=`${p} / ${totalPages} páginas`; await sleep(250); }
+    j('#busyHint').style.display='none';
+    const ids=new Set(); for(const o of ordersRaw){ ids.add(o.type_id); ids.add(o.location_id);} if(ids.size){ const arr=[...ids]; const chunk=900; for(let i=0;i<arr.length;i+=chunk){ const names=await post(`${ESI}/universe/names/`,arr.slice(i,i+chunk)); for(const n of names){ nameCache.set(n.id,n.name);} await sleep(30);} }
+    const stSel=j('#fStation'); stSel.innerHTML=`<option value="all">Todas</option>` + [...new Set(ordersRaw.map(o=>o.location_id))].map(id=>`<option value="${id}">${nameCache.get(id)||id}</option>`).join("");
+    render();
+  }catch(err){ console.error(err); j('#busyHint').style.display='none'; alert('Fallo al consultar ESI. Revisa conexión o intenta con otra región.'); }
+}
+function filterAndPush(arr){ for(const o of arr){ if(stationsInConstellation.has(o.location_id)) ordersRaw.push(o); } }
+
+function currentFilters(){ return { type:j('#fType').value.trim().toLowerCase(), pmin:parseFloat(j('#fPriceMin').value||'NaN'), pmax:parseFloat(j('#fPriceMax').value||'NaN'), vmin:parseInt(j('#fVol').value||'NaN'), mmin:parseInt(j('#fMin').value||'NaN'), range:j('#fRange').value, system:j('#fSystem').value, station:j('#fStation').value, issued:j('#fIssued').value, duration:j('#fDuration').value }; }
+function mapOrder(o){ const sysId=stationToSystem.get(o.location_id); return { type_id:o.type_id, type_name:nameCache.get(o.type_id)||o.type_id, price:o.price, volume_remain:o.volume_remain, min_volume:o.min_volume, range:o.range, station_id:o.location_id, station_name:nameCache.get(o.location_id)||o.location_id, system_id:sysId, system_name:systemNameMap.get(sysId)||sysId, issued:o.issued, duration:o.duration }; }
+function applyFilters(rows,f){ return rows.filter(r=>{ if(f.type&&!(""+r.type_name).toLowerCase().includes(f.type))return false; if(!Number.isNaN(f.pmin)&&r.price<f.pmin)return false; if(!Number.isNaN(f.pmax)&&r.price>f.pmax)return false; if(!Number.isNaN(f.vmin)&&r.volume_remain<f.vmin)return false; if(!Number.isNaN(f.mmin)&&r.min_volume<f.mmin)return false; if(f.range!=='all'&&(""+r.range)!==f.range)return false; if(f.system!=='all'&&(""+r.system_id)!==f.system)return false; if(f.station!=='all'&&(""+r.station_id)!==f.station)return false; if(f.issued!=='all'){ const d=isoDaysAgo(r.issued); if(f.issued==='24h'&&d>1)return false; if(f.issued==='7d'&&d>7)return false; if(f.issued==='30d'&&d>30)return false;} if(f.duration!=='all'&&(""+r.duration)!==(f.duration))return false; return true; }); }
+function render(){ const tbody=j('#ordersTable tbody'); let rows=ordersRaw.map(mapOrder); const f=currentFilters(); rows=applyFilters(rows,f); rows=sortBy(rows,currentSort.k,currentSort.dir); j('#ordersCount').textContent=fmtInt(rows.length); if(!ordersRaw.length) j('#pagesInfo').textContent='0 / 0 páginas'; j('#exportBtn').disabled=rows.length===0; tbody.innerHTML=rows.map(r=>`<tr><td>${escapeHtml(r.type_name)}</td><td class="k">${fmtPrice(r.price)}</td><td>${fmtInt(r.volume_remain)}</td><td>${fmtInt(r.min_volume)}</td><td>${r.range}</td><td>${escapeHtml(r.system_name)}</td><td>${escapeHtml(r.station_name)}</td><td><span class="muted" title="${r.issued}">${new Date(r.issued).toLocaleString()}</span></td><td>${r.duration}</td></tr>`).join(''); }
+function escapeHtml(s){ return (""+s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[m])); }
+function exportCSV(){ let rows=ordersRaw.map(mapOrder); rows=applyFilters(rows,currentFilters()); rows=sortBy(rows,currentSort.k,currentSort.dir); const headers=["type_name","price","volume_remain","min_volume","range","system_name","station_name","issued","duration"]; const csv=[headers.join(",")].concat(rows.map(r=>[`"${(""+r.type_name).replace(/"/g,'""')}"`,r.price,r.volume_remain,r.min_volume,r.range,`"${(""+r.system_name).replace(/"/g,'""')}"`,`"${(""+r.station_name).replace(/"/g,'""')}"`,r.issued,r.duration].join(","))).join("\n"); const blob=new Blob([csv],{type:"text/csv;charset=utf-8"}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='ordenes_eve.csv'; a.click(); URL.revokeObjectURL(url); }
+
+j('#region').addEventListener('change',onRegionChange);
+j('#constellation').addEventListener('change',onConstellationChange);
+j('#queryBtn').addEventListener('click',queryMarket);
+j('#exportBtn').addEventListener('click',exportCSV);
+for(const id of ['fType','fPriceMin','fPriceMax','fVol','fMin','fRange','fSystem','fStation','fIssued','fDuration']){ j('#'+id).addEventListener('input',render); j('#'+id).addEventListener('change',render); }
+document.querySelectorAll('thead tr.head th.sortable').forEach(th=>{ th.addEventListener('click',()=>{ const k=th.dataset.k; if(!k) return; if(currentSort.k===k){ currentSort.dir*=-1; } else { currentSort.k=k; currentSort.dir=1; } render(); }); });
+
+(async function init(){ try{ await loadRegions(); } catch(e){ console.error(e); alert('Error cargando catálogos de ESI. Revisa tu conexión e inténtalo de nuevo.'); } })();
+</script>
+</body>
+</html>
