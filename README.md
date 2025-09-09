@@ -8,4 +8,4 @@ Open `client/index.html` in a modern browser. The page loads region data from th
 
 ## Development Notes
 
-The client caches API responses and throttles requests (~300 ms between calls) to respect ESI rate limits. Responses that fail with 420/429/503 are retried with exponential backoff. The previous Flask backend remains in `server/` but is not required for the static site.
+The client caches API responses and throttles requests (~300 ms between calls) to respect ESI rate limits. Responses that fail with 420/429/503 are retried with exponential backoff.
