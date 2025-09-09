@@ -196,7 +196,7 @@ function clearCache(){
 window.clearEsiCache=clearCache;
 
 async function fetchWithRetry(url, opts = {}, maxRetries = 3) {
-  opts.headers = { ...(opts.headers || {}), "User-Agent": "EVE Market Explorer (contacto@example.com)" };
+  opts.headers = { ...(opts.headers || {}), "User-Agent": "EVE Market Explorer (leo.devo@live.com.mx)" };
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const res = await fetch(url, opts);
     const remain = Number(res.headers.get("X-Esi-Error-Limit-Remain") || "100");
