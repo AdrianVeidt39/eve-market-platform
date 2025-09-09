@@ -83,6 +83,17 @@
       </p>
     </div>
 
+    <div id="analytics" class="card" style="margin-top:16px;display:none">
+      <div class="section-title">Visualizaciones</div>
+      <div id="kpiPanel" class="kpis"></div>
+      <canvas id="chartVol"></canvas>
+      <canvas id="chartVal"></canvas>
+      <canvas id="chartDist"></canvas>
+      <canvas id="chartHeat"></canvas>
+      <canvas id="chartScatter"></canvas>
+      <canvas id="chartAge"></canvas>
+    </div>
+
     <div class="card" style="margin-top:16px">
       <div class="section-title">Órdenes encontradas</div>
       <div class="controls">
@@ -145,16 +156,6 @@
       </div>
       <p id="systemNote" class="note" style="display:none"></p>
     </div>
-    <div id="analytics" class="card" style="margin-top:16px;display:none">
-      <div class="section-title">Visualizaciones</div>
-      <div id="kpiPanel" class="kpis"></div>
-      <canvas id="chartVol"></canvas>
-      <canvas id="chartVal"></canvas>
-      <canvas id="chartDist"></canvas>
-      <canvas id="chartHeat"></canvas>
-      <canvas id="chartScatter"></canvas>
-      <canvas id="chartAge"></canvas>
-    </div>
   </div>
 
 <script>
@@ -163,6 +164,7 @@ const j = s=>document.querySelector(s);
 const fmtPrice = n=>Number(n).toLocaleString("en-US",{maximumFractionDigits:2});
 const fmtInt = n=>Number(n).toLocaleString("en-US",{maximumFractionDigits:0});
 const sleep = ms=>new Promise(r=>setTimeout(r,ms));
+const palette = ['#30a3ff','#00d1b2','#ff6b6b','#ffc107','#9b59b6','#e67e22','#2ecc71','#f39c12','#8e44ad','#1abc9c'];
 
 const LOG_ESI = true; // Desactiva en producción
 
@@ -369,13 +371,13 @@ function generateCharts(){
   }
 
   const topVol=[...volMap.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10);
-  charts.vol=new Chart(j('#chartVol'),{type:'bar',data:{labels:topVol.map(x=>x[0]),datasets:[{data:topVol.map(x=>x[1]),backgroundColor:'var(--accent)'}]},options:{indexAxis:'y',plugins:{legend:{display:false}}}});
+  charts.vol=new Chart(j('#chartVol'),{type:'bar',data:{labels:topVol.map(x=>x[0]),datasets:[{data:topVol.map(x=>x[1]),backgroundColor:palette.slice(0,topVol.length)}]},options:{indexAxis:'y',plugins:{legend:{display:false}}}});
 
   const topVal=[...valMap.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10);
-  charts.val=new Chart(j('#chartVal'),{type:'bar',data:{labels:topVal.map(x=>x[0]),datasets:[{data:topVal.map(x=>x[1]),backgroundColor:'var(--accent2)'}]},options:{indexAxis:'y',plugins:{legend:{display:false}}}});
+  charts.val=new Chart(j('#chartVal'),{type:'bar',data:{labels:topVal.map(x=>x[0]),datasets:[{data:topVal.map(x=>x[1]),backgroundColor:palette.slice(0,topVal.length)}]},options:{indexAxis:'y',plugins:{legend:{display:false}}}});
 
   const distItems=[...priceMap.entries()].sort((a,b)=>b[1].length-a[1].length).slice(0,10);
-  charts.dist=new Chart(j('#chartDist'),{type:'boxplot',data:{labels:distItems.map(x=>x[0]),datasets:[{data:distItems.map(x=>x[1]),backgroundColor:'var(--accent)'}]},options:{plugins:{legend:{display:false}}}});
+  charts.dist=new Chart(j('#chartDist'),{type:'boxplot',data:{labels:distItems.map(x=>x[0]),datasets:[{data:distItems.map(x=>x[1]),backgroundColor:palette.slice(0,distItems.length)}]},options:{plugins:{legend:{display:false}}}});
 
   const sysData=[]; const xs=[],ys=[];
   systems.forEach(s=>{
@@ -383,12 +385,12 @@ function generateCharts(){
     if(c>0 && s.pos){ sysData.push({x:s.pos.x,y:s.pos.y,r:Math.sqrt(c)*3,count:c,label:s.name}); xs.push(s.pos.x); ys.push(s.pos.y); }
   });
   if(sysData.length){ const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys); sysData.forEach(d=>{d.x=(d.x-minX)/(maxX-minX); d.y=(d.y-minY)/(maxY-minY);}); }
-  charts.heat=new Chart(j('#chartHeat'),{type:'bubble',data:{datasets:[{data:sysData,backgroundColor:'var(--accent)'}]},options:{scales:{x:{display:false},y:{display:false}},plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${ctx.raw.label}: ${ctx.raw.count} órdenes`}}}}});
+  charts.heat=new Chart(j('#chartHeat'),{type:'bubble',data:{datasets:[{data:sysData,backgroundColor:'rgba(48,163,255,0.5)',borderColor:'var(--accent)'}]},options:{scales:{x:{display:false},y:{display:false}},plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>`${ctx.raw.label}: ${ctx.raw.count} órdenes`}}}}});
 
-  charts.scatter=new Chart(j('#chartScatter'),{type:'scatter',data:{datasets:[{data:scatterPV,backgroundColor:'var(--accent2)'}]},options:{scales:{x:{title:{display:true,text:'Volumen'}},y:{title:{display:true,text:'Precio'}}}}});
+  charts.scatter=new Chart(j('#chartScatter'),{type:'scatter',data:{datasets:[{data:scatterPV,backgroundColor:'rgba(0,209,178,0.5)',borderColor:'var(--accent2)'}]},options:{scales:{x:{title:{display:true,text:'Volumen'}},y:{title:{display:true,text:'Precio'}}}}});
 
   const maxDay=Math.max(...days,0); const bins=Array.from({length:Math.min(maxDay+1,30)},()=>0); days.forEach(d=>{ if(d<bins.length) bins[d]++; else bins[bins.length-1]++; });
-  charts.age=new Chart(j('#chartAge'),{type:'bar',data:{labels:bins.map((_,i)=>i===bins.length-1?`${i}+`:String(i)),datasets:[{data:bins,backgroundColor:'var(--accent)'}]},options:{plugins:{legend:{display:false}},scales:{x:{title:{display:true,text:'Días desde emisión'}},y:{title:{display:true,text:'Órdenes'}}}}});
+  charts.age=new Chart(j('#chartAge'),{type:'bar',data:{labels:bins.map((_,i)=>i===bins.length-1?`${i}+`:String(i)),datasets:[{data:bins,backgroundColor:palette.slice(0,bins.length)}]},options:{plugins:{legend:{display:false}},scales:{x:{title:{display:true,text:'Días desde emisión'}},y:{title:{display:true,text:'Órdenes'}}}}});
 }
 
 j('#region').addEventListener('change',onRegionChange);
