@@ -87,11 +87,17 @@
       <div class="section-title">Visualizaciones</div>
       <div id="kpiPanel" class="kpis"></div>
       <canvas id="chartVol"></canvas>
+      <p id="chartVolNote" class="note" style="display:none"></p>
       <canvas id="chartVal"></canvas>
+      <p id="chartValNote" class="note" style="display:none"></p>
       <canvas id="chartDist"></canvas>
+      <p id="chartDistNote" class="note" style="display:none"></p>
       <canvas id="chartHeat"></canvas>
+      <p id="chartHeatNote" class="note" style="display:none"></p>
       <canvas id="chartScatter"></canvas>
+      <p id="chartScatterNote" class="note" style="display:none"></p>
       <canvas id="chartAge"></canvas>
+      <p id="chartAgeNote" class="note" style="display:none"></p>
     </div>
 
     <div class="card" style="margin-top:16px">
@@ -240,6 +246,26 @@ let ordersRaw=[];
 let nameCache=new Map();
 let currentSort={k:"type_name",dir:1};
 let charts={};
+const chartIds=['chartVol','chartVal','chartDist','chartHeat','chartScatter','chartAge'];
+
+function showChartNote(id,msg){
+  const canvas=j('#'+id);
+  const note=j('#'+id+'Note');
+  if(canvas&&note){
+    canvas.style.display='none';
+    note.textContent=msg;
+    note.style.display='block';
+  }
+}
+function hideChartNote(id){
+  const canvas=j('#'+id);
+  const note=j('#'+id+'Note');
+  if(canvas&&note){
+    canvas.style.display='block';
+    note.style.display='none';
+    note.textContent='';
+  }
+}
 
 async function loadRegions(){
   const cached=getCache('esi.regions');
@@ -352,8 +378,9 @@ function generateCharts(){
     <div class="kpi"><div class="num">${escapeHtml(maxR.type_name)}</div><div>Más caro (${fmtPrice(maxR.price)})</div></div>
     <div class="kpi"><div class="num">${escapeHtml(minR.type_name)}</div><div>Más barato (${fmtPrice(minR.price)})</div></div>`;
 
-  for(const k in charts){ charts[k].destroy(); }
-  charts={};
+    for(const k in charts){ charts[k].destroy(); }
+    charts={};
+    chartIds.forEach(hideChartNote);
 
   const volMap=new Map();
   const valMap=new Map();
@@ -371,27 +398,63 @@ function generateCharts(){
     days.push(Math.floor((Date.now()-new Date(r.issued).getTime())/86400000));
   }
 
-  const topVol=[...volMap.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10);
-  charts.vol=new Chart(j('#chartVol'),{type:'bar',data:{labels:topVol.map(x=>x[0]),datasets:[{data:topVol.map(x=>x[1]),backgroundColor:palette.slice(0,topVol.length)}]},options:{indexAxis:'y',plugins:{legend:{display:false},title:{display:true,text:'Top 10 ítems por volumen'}}}});
+    const topVol=[...volMap.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10);
+    if(topVol.length){
+      try{
+        charts.vol=new Chart(j('#chartVol'),{type:'bar',data:{labels:topVol.map(x=>x[0]),datasets:[{data:topVol.map(x=>x[1]),backgroundColor:palette.slice(0,topVol.length)}]},options:{indexAxis:'y',plugins:{legend:{display:false},title:{display:true,text:'Top 10 ítems por volumen'}}}});
+      }catch(e){ console.error(e); showChartNote('chartVol','No se pudo generar la gráfica con los datos actuales.'); }
+    } else {
+      showChartNote('chartVol','No hay datos para esta gráfica.');
+    }
 
-  const topVal=[...valMap.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10);
-  charts.val=new Chart(j('#chartVal'),{type:'bar',data:{labels:topVal.map(x=>x[0]),datasets:[{data:topVal.map(x=>x[1]),backgroundColor:palette.slice(0,topVal.length)}]},options:{indexAxis:'y',plugins:{legend:{display:false},title:{display:true,text:'Top 10 ítems por valor'}}}});
+    const topVal=[...valMap.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10);
+    if(topVal.length){
+      try{
+        charts.val=new Chart(j('#chartVal'),{type:'bar',data:{labels:topVal.map(x=>x[0]),datasets:[{data:topVal.map(x=>x[1]),backgroundColor:palette.slice(0,topVal.length)}]},options:{indexAxis:'y',plugins:{legend:{display:false},title:{display:true,text:'Top 10 ítems por valor'}}}});
+      }catch(e){ console.error(e); showChartNote('chartVal','No se pudo generar la gráfica con los datos actuales.'); }
+    } else {
+      showChartNote('chartVal','No hay datos para esta gráfica.');
+    }
 
-  const distItems=[...priceMap.entries()].sort((a,b)=>b[1].length-a[1].length).slice(0,10);
-  charts.dist=new Chart(j('#chartDist'),{type:'boxplot',data:{labels:distItems.map(x=>x[0]),datasets:[{data:distItems.map(x=>x[1]),backgroundColor:palette.slice(0,distItems.length)}]},options:{plugins:{legend:{display:false},title:{display:true,text:'Distribución de precios (top 10 ítems)'}}}});
+    const distItems=[...priceMap.entries()].sort((a,b)=>b[1].length-a[1].length).slice(0,10);
+    if(distItems.length){
+      try{
+        charts.dist=new Chart(j('#chartDist'),{type:'boxplot',data:{labels:distItems.map(x=>x[0]),datasets:[{data:distItems.map(x=>x[1]),backgroundColor:palette.slice(0,distItems.length)}]},options:{plugins:{legend:{display:false},title:{display:true,text:'Distribución de precios (top 10 ítems)'}}}});
+      }catch(e){ console.error(e); showChartNote('chartDist','No se pudo generar la gráfica con los datos actuales.'); }
+    } else {
+      showChartNote('chartDist','No hay datos suficientes para esta gráfica.');
+    }
 
-  const sysData=[]; const xs=[],ys=[];
-  systems.forEach(s=>{
-    const c=sysCount.get(s.id)||0;
-    if(c>0 && s.pos){ sysData.push({x:s.pos.x,y:s.pos.y,r:Math.sqrt(c)*3,count:c,label:s.name}); xs.push(s.pos.x); ys.push(s.pos.y); }
-  });
-  if(sysData.length){ const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys); sysData.forEach(d=>{d.x=(d.x-minX)/(maxX-minX); d.y=(d.y-minY)/(maxY-minY);}); }
-  charts.heat=new Chart(j('#chartHeat'),{type:'bubble',data:{datasets:[{data:sysData,backgroundColor:'rgba(48,163,255,0.5)',borderColor:'var(--accent)'}]},options:{scales:{x:{display:false},y:{display:false}},plugins:{legend:{display:false},title:{display:true,text:'Órdenes por sistema'},tooltip:{callbacks:{label:ctx=>`${ctx.raw.label}: ${ctx.raw.count} órdenes`}}}}});
+    const sysData=[]; const xs=[],ys=[];
+    systems.forEach(s=>{
+      const c=sysCount.get(s.id)||0;
+      if(c>0 && s.pos){ sysData.push({x:s.pos.x,y:s.pos.y,r:Math.sqrt(c)*3,count:c,label:s.name}); xs.push(s.pos.x); ys.push(s.pos.y); }
+    });
+    if(sysData.length){ const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys); sysData.forEach(d=>{d.x=(d.x-minX)/(maxX-minX); d.y=(d.y-minY)/(maxY-minY);}); }
+    if(sysData.length){
+      try{
+        charts.heat=new Chart(j('#chartHeat'),{type:'bubble',data:{datasets:[{data:sysData,backgroundColor:'rgba(48,163,255,0.5)',borderColor:'var(--accent)'}]},options:{scales:{x:{display:false},y:{display:false}},plugins:{legend:{display:false},title:{display:true,text:'Órdenes por sistema'},tooltip:{callbacks:{label:ctx=>`${ctx.raw.label}: ${ctx.raw.count} órdenes`}}}}});
+      }catch(e){ console.error(e); showChartNote('chartHeat','No se pudo generar la gráfica con los datos actuales.'); }
+    } else {
+      showChartNote('chartHeat','No hay datos suficientes para esta gráfica.');
+    }
 
-  charts.scatter=new Chart(j('#chartScatter'),{type:'scatter',data:{datasets:[{data:scatterPV,backgroundColor:'rgba(0,209,178,0.5)',borderColor:'var(--accent2)'}]},options:{plugins:{legend:{display:false},title:{display:true,text:'Precio vs volumen'}},scales:{x:{title:{display:true,text:'Volumen'}},y:{title:{display:true,text:'Precio'}}}}});
+    if(scatterPV.length){
+      try{
+        charts.scatter=new Chart(j('#chartScatter'),{type:'scatter',data:{datasets:[{data:scatterPV,backgroundColor:'rgba(0,209,178,0.5)',borderColor:'var(--accent2)'}]},options:{plugins:{legend:{display:false},title:{display:true,text:'Precio vs volumen'}},scales:{x:{title:{display:true,text:'Volumen'}},y:{title:{display:true,text:'Precio'}}}}});
+      }catch(e){ console.error(e); showChartNote('chartScatter','No se pudo generar la gráfica con los datos actuales.'); }
+    } else {
+      showChartNote('chartScatter','No hay datos para esta gráfica.');
+    }
 
-  const maxDay=Math.max(...days,0); const bins=Array.from({length:Math.min(maxDay+1,30)},()=>0); days.forEach(d=>{ if(d<bins.length) bins[d]++; else bins[bins.length-1]++; });
-  charts.age=new Chart(j('#chartAge'),{type:'bar',data:{labels:bins.map((_,i)=>i===bins.length-1?`${i}+`:String(i)),datasets:[{data:bins,backgroundColor:palette.slice(0,bins.length)}]},options:{plugins:{legend:{display:false},title:{display:true,text:'Antigüedad de órdenes'}},scales:{x:{title:{display:true,text:'Días desde emisión'}},y:{title:{display:true,text:'Órdenes'}}}}});
+    const maxDay=Math.max(...days,0); const bins=Array.from({length:Math.min(maxDay+1,30)},()=>0); days.forEach(d=>{ if(d<bins.length) bins[d]++; else bins[bins.length-1]++; });
+    if(bins.some(v=>v>0)){
+      try{
+        charts.age=new Chart(j('#chartAge'),{type:'bar',data:{labels:bins.map((_,i)=>i===bins.length-1?`${i}+`:String(i)),datasets:[{data:bins,backgroundColor:palette.slice(0,bins.length)}]},options:{plugins:{legend:{display:false},title:{display:true,text:'Antigüedad de órdenes'}},scales:{x:{title:{display:true,text:'Días desde emisión'}},y:{title:{display:true,text:'Órdenes'}}}}});
+      }catch(e){ console.error(e); showChartNote('chartAge','No se pudo generar la gráfica con los datos actuales.'); }
+    } else {
+      showChartNote('chartAge','No hay datos suficientes para esta gráfica.');
+    }
 }
 
 j('#region').addEventListener('change',onRegionChange);
