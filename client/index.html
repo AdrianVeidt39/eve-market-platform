@@ -116,11 +116,11 @@
         <table id="ordersTable">
           <thead>
             <tr class="head">
-              <th class="sortable" data-k="type_name">Tipo</th>
+              <th class="sortable" data-k="type_name">Artículo</th>
               <th class="sortable" data-k="order_type">Orden</th>
               <th class="sortable" data-k="price">Precio</th>
-              <th class="sortable" data-k="volume_remain">Volumen</th>
-              <th class="sortable" data-k="min_volume">Mín.</th>
+              <th class="sortable" data-k="volume_remain">Cantidad ofertada</th>
+              <th class="sortable" data-k="min_volume">Mínimo de compra</th>
               <th class="sortable" data-k="range">Rango</th>
               <th class="sortable" data-k="system_name">Sistema</th>
               <th class="sortable" data-k="station_name">Estación</th>
@@ -128,7 +128,7 @@
               <th class="sortable" data-k="duration">Duración</th>
             </tr>
             <tr class="filters">
-              <th><input id="fType" type="text" placeholder="Tipo (ej. Antimatter)"/></th>
+              <th><input id="fType" type="text" placeholder="Artículo (ej. Antimatter)"/></th>
               <th>
                 <select id="fSide">
                   <option value="all">Todas</option>
@@ -137,8 +137,8 @@
                 </select>
               </th>
               <th><div class="hstack"><input id="fPriceMin" type="number" placeholder="Precio mín." step="0.01"/><input id="fPriceMax" type="number" placeholder="Precio máx." step="0.01"/></div></th>
-              <th><input id="fVol" type="number" placeholder="Volumen mín."/></th>
-              <th><input id="fMin" type="number" placeholder="Mín. por orden"/></th>
+              <th><input id="fVol" type="number" placeholder="Cantidad ofertada mín."/></th>
+              <th><input id="fMin" type="number" placeholder="Mínimo de compra por orden"/></th>
               <th>
                 <select id="fRange">
                   <option value="all">Todos</option>
