@@ -31,8 +31,6 @@
   thead tr.head th{cursor:pointer;top:0;z-index:3}
   thead tr.filters th{top:44px;z-index:2;background:#0e1520;cursor:default;padding:8px}
   thead tr.filters input, thead tr.filters select{width:100%;margin:0}
-  .hstack{display:flex;gap:6px}
-  .hstack>*{flex:1 1 0}
   tbody td{border-top:1px solid var(--border);padding:10px 12px;vertical-align:top}
   tbody tr:hover{background:#111a27}
   .right{display:flex;gap:8px;align-items:center;margin-left:auto}
@@ -157,9 +155,9 @@
                   <option value="buy">Compra</option>
                 </select>
               </th>
-              <th><div class="hstack"><input id="fPriceMin" type="number" placeholder="Precio mín." step="0.01"/><input id="fPriceMax" type="number" placeholder="Precio máx." step="0.01"/></div></th>
-              <th><div class="hstack"><input id="fVolMin" type="number" placeholder="Unidades mín."/><input id="fVolMax" type="number" placeholder="Unidades máx."/></div></th>
-              <th><div class="hstack"><input id="fMinMin" type="number" placeholder="Compra mín."/><input id="fMinMax" type="number" placeholder="Compra máx."/></div></th>
+                <th><div class="field"><input id="fPriceMin" type="number" placeholder="Precio mín." step="0.01"/><input id="fPriceMax" type="number" placeholder="Precio máx." step="0.01"/></div></th>
+                <th><div class="field"><input id="fVolMin" type="number" placeholder="Unidades mín."/><input id="fVolMax" type="number" placeholder="Unidades máx."/></div></th>
+                <th><div class="field"><input id="fMinMin" type="number" placeholder="Compra mín."/><input id="fMinMax" type="number" placeholder="Compra máx."/></div></th>
               <th>
                 <select id="fRange">
                   <option value="all">Todos</option>
