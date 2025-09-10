@@ -469,7 +469,7 @@ function generateCharts(){
     const topVol=[...volMap.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10);
     if(topVol.length){
       try{
-        charts.vol=new Chart(j('#chartVol'),{type:'bar',data:{labels:topVol.map(x=>x[0]),datasets:[{data:topVol.map(x=>x[1]),backgroundColor:palette.slice(0,topVol.length),barPercentage:0.375,categoryPercentage:0.5}]},options:{indexAxis:'y',plugins:{legend:{display:false},title:{display:true,text:'Top 10 ítems por unidades (Gráfico de barras)'}}}});
+        charts.vol=new Chart(j('#chartVol'),{type:'bar',data:{labels:topVol.map(x=>x[0]),datasets:[{data:topVol.map(x=>x[1]),backgroundColor:palette.slice(0,topVol.length),barPercentage:0.1875,categoryPercentage:1}]},options:{indexAxis:'y',plugins:{legend:{display:false},title:{display:true,text:'Top 10 ítems por unidades (Gráfico de barras)'}}}});
       }catch(e){ console.error(e); showChartNote('chartVol','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
       showChartNote('chartVol','No hay datos para esta gráfica.');
@@ -478,7 +478,7 @@ function generateCharts(){
     const topVal=[...valMap.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10);
     if(topVal.length){
       try{
-        charts.val=new Chart(j('#chartVal'),{type:'bar',data:{labels:topVal.map(x=>x[0]),datasets:[{data:topVal.map(x=>x[1]),backgroundColor:palette.slice(0,topVal.length),barPercentage:0.375,categoryPercentage:0.5}]},options:{indexAxis:'y',plugins:{legend:{display:false},title:{display:true,text:'Top 10 ítems por valor (Gráfico de barras)'}}}});
+        charts.val=new Chart(j('#chartVal'),{type:'bar',data:{labels:topVal.map(x=>x[0]),datasets:[{data:topVal.map(x=>x[1]),backgroundColor:palette.slice(0,topVal.length),barPercentage:0.1875,categoryPercentage:1}]},options:{indexAxis:'y',plugins:{legend:{display:false},title:{display:true,text:'Top 10 ítems por valor (Gráfico de barras)'}}}});
       }catch(e){ console.error(e); showChartNote('chartVal','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
       showChartNote('chartVal','No hay datos para esta gráfica.');
