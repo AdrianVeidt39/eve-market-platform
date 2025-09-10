@@ -119,7 +119,7 @@
               <th class="sortable" data-k="type_name">Artículo</th>
               <th class="sortable" data-k="order_type">Orden</th>
               <th class="sortable" data-k="price">Precio</th>
-              <th class="sortable" data-k="volume_remain">Cantidad ofertada</th>
+              <th class="sortable" data-k="volume_remain">Unidades</th>
               <th class="sortable" data-k="min_volume">Mínimo de compra</th>
               <th class="sortable" data-k="range">Rango</th>
               <th class="sortable" data-k="system_name">Sistema</th>
@@ -137,7 +137,7 @@
                 </select>
               </th>
               <th><div class="hstack"><input id="fPriceMin" type="number" placeholder="Precio mín." step="0.01"/><input id="fPriceMax" type="number" placeholder="Precio máx." step="0.01"/></div></th>
-              <th><input id="fVol" type="number" placeholder="Cantidad ofertada mín."/></th>
+              <th><input id="fVol" type="number" placeholder="Unidades mín."/></th>
               <th><input id="fMin" type="number" placeholder="Mínimo de compra por orden"/></th>
               <th>
                 <select id="fRange">
@@ -188,6 +188,15 @@ const fmtBig = n=>{
 };
 const sleep = ms=>new Promise(r=>setTimeout(r,ms));
 const palette = ['#30a3ff','#00d1b2','#ff6b6b','#ffc107','#9b59b6','#e67e22','#2ecc71','#f39c12','#8e44ad','#1abc9c'];
+
+const tableLabelColor = getComputedStyle(document.querySelector('thead th')).color;
+Chart.defaults.color = tableLabelColor;
+Chart.defaults.plugins.legend.labels.color = tableLabelColor;
+Chart.defaults.plugins.title.color = tableLabelColor;
+Chart.defaults.scales.category.ticks.color = tableLabelColor;
+Chart.defaults.scales.category.title.color = tableLabelColor;
+Chart.defaults.scales.linear.ticks.color = tableLabelColor;
+Chart.defaults.scales.linear.title.color = tableLabelColor;
 
 const LOG_ESI = true; // Desactiva en producción
 
@@ -389,7 +398,7 @@ function generateCharts(){
     if(r.price<minR.price) minR=r;
   }
   j('#kpiPanel').innerHTML=`
-    <div class="kpi"><div class="num">${fmtBig(totalVol)}</div><div>Cantidad ofertada total</div></div>
+    <div class="kpi"><div class="num">${fmtBig(totalVol)}</div><div>Unidades totales</div></div>
     <div class="kpi"><div class="num">${fmtBig(totalISK)}</div><div>Precio total</div></div>
     <div class="kpi"><div class="num">${items.size}</div><div>Artículos únicos</div></div>
     <div class="kpi"><div class="num">${escapeHtml(maxR.type_name)}</div><div>Más caro (${fmtPrice(maxR.price)})</div></div>
@@ -418,7 +427,7 @@ function generateCharts(){
     const topVol=[...volMap.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10);
     if(topVol.length){
       try{
-        charts.vol=new Chart(j('#chartVol'),{type:'bar',data:{labels:topVol.map(x=>x[0]),datasets:[{data:topVol.map(x=>x[1]),backgroundColor:palette.slice(0,topVol.length)}]},options:{indexAxis:'y',plugins:{legend:{display:false},title:{display:true,text:'Top 10 artículos por cantidad ofertada (Gráfico de barras)'}}}});
+        charts.vol=new Chart(j('#chartVol'),{type:'bar',data:{labels:topVol.map(x=>x[0]),datasets:[{data:topVol.map(x=>x[1]),backgroundColor:palette.slice(0,topVol.length)}]},options:{indexAxis:'y',plugins:{legend:{display:false},title:{display:true,text:'Top 10 artículos por unidades (Gráfico de barras)'}}}});
       }catch(e){ console.error(e); showChartNote('chartVol','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
       showChartNote('chartVol','No hay datos para esta gráfica.');
@@ -458,7 +467,7 @@ function generateCharts(){
 
     if(scatterPV.length){
       try{
-        charts.scatter=new Chart(j('#chartScatter'),{type:'scatter',data:{datasets:[{data:scatterPV,backgroundColor:'rgba(0,209,178,0.5)',borderColor:'var(--accent2)'}]},options:{plugins:{legend:{display:false},title:{display:true,text:'Precio vs cantidad ofertada (Gráfico de dispersión)'}},scales:{x:{title:{display:true,text:'Cantidad ofertada'}},y:{title:{display:true,text:'Precio'}}}}});
+        charts.scatter=new Chart(j('#chartScatter'),{type:'scatter',data:{datasets:[{data:scatterPV,backgroundColor:'rgba(0,209,178,0.5)',borderColor:'var(--accent2)'}]},options:{plugins:{legend:{display:false},title:{display:true,text:'Precio vs unidades (Gráfico de dispersión)'}},scales:{x:{title:{display:true,text:'Unidades'}},y:{title:{display:true,text:'Precio'}}}}});
       }catch(e){ console.error(e); showChartNote('chartScatter','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
       showChartNote('chartScatter','No hay datos para esta gráfica.');
