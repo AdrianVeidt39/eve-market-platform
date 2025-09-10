@@ -469,7 +469,7 @@ function generateCharts(){
     const topVol=[...volMap.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10);
     if(topVol.length){
       try{
-        charts.vol=new Chart(j('#chartVol'),{type:'bar',data:{labels:topVol.map(x=>x[0]),datasets:[{data:topVol.map(x=>x[1]),backgroundColor:palette.slice(0,topVol.length),barPercentage:0.25}]},options:{indexAxis:'y',plugins:{legend:{display:false},title:{display:true,text:'Top 10 ítems por unidades (Gráfico de barras)'}}}});
+        charts.vol=new Chart(j('#chartVol'),{type:'bar',data:{labels:topVol.map(x=>x[0]),datasets:[{data:topVol.map(x=>x[1]),backgroundColor:palette.slice(0,topVol.length),barPercentage:0.75}]},options:{indexAxis:'y',plugins:{legend:{display:false},title:{display:true,text:'Top 10 ítems por unidades (Gráfico de barras)'}}}});
       }catch(e){ console.error(e); showChartNote('chartVol','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
       showChartNote('chartVol','No hay datos para esta gráfica.');
@@ -478,7 +478,7 @@ function generateCharts(){
     const topVal=[...valMap.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10);
     if(topVal.length){
       try{
-        charts.val=new Chart(j('#chartVal'),{type:'bar',data:{labels:topVal.map(x=>x[0]),datasets:[{data:topVal.map(x=>x[1]),backgroundColor:palette.slice(0,topVal.length),barPercentage:0.25}]},options:{indexAxis:'y',plugins:{legend:{display:false},title:{display:true,text:'Top 10 ítems por valor (Gráfico de barras)'}}}});
+        charts.val=new Chart(j('#chartVal'),{type:'bar',data:{labels:topVal.map(x=>x[0]),datasets:[{data:topVal.map(x=>x[1]),backgroundColor:palette.slice(0,topVal.length),barPercentage:0.75}]},options:{indexAxis:'y',plugins:{legend:{display:false},title:{display:true,text:'Top 10 ítems por valor (Gráfico de barras)'}}}});
       }catch(e){ console.error(e); showChartNote('chartVal','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
       showChartNote('chartVal','No hay datos para esta gráfica.');
@@ -534,10 +534,10 @@ function generateCharts(){
       showChartNote('chartScatter','No hay datos para esta gráfica.');
     }
 
-    const maxDay=Math.max(...days,0); const bins=Array.from({length:Math.min(maxDay+1,30)},()=>0); days.forEach(d=>{ if(d<bins.length) bins[d]++; else bins[bins.length-1]++; });
+    const maxDay=Math.max(...days,0); const bins=Array.from({length:Math.min(maxDay+1,90)},()=>0); days.forEach(d=>{ if(d<bins.length) bins[d]++; else bins[bins.length-1]++; });
     if(bins.some(v=>v>0)){
       try{
-        charts.age=new Chart(j('#chartAge'),{type:'bar',data:{labels:bins.map((_,i)=>i===bins.length-1?`${i}+`:String(i)),datasets:[{data:bins,backgroundColor:palette.slice(0,bins.length),barPercentage:0.25}]},options:{plugins:{legend:{display:false},title:{display:true,text:'Antigüedad de órdenes (Gráfico de barras)'}},scales:{x:{title:{display:true,text:'Días desde emisión'}},y:{title:{display:true,text:'Órdenes'}}}}});
+        charts.age=new Chart(j('#chartAge'),{type:'bar',data:{labels:bins.map((_,i)=>i===bins.length-1?`${i}+`:String(i)),datasets:[{data:bins,backgroundColor:palette.slice(0,bins.length),barPercentage:0.75}]},options:{plugins:{legend:{display:false},title:{display:true,text:'Antigüedad de órdenes (Gráfico de barras)'}},scales:{x:{title:{display:true,text:'Días desde emisión'}},y:{title:{display:true,text:'Órdenes'}}}}});
       }catch(e){ console.error(e); showChartNote('chartAge','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
       showChartNote('chartAge','No hay datos suficientes para esta gráfica.');
