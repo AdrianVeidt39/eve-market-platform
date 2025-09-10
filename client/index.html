@@ -395,7 +395,7 @@ function generateCharts(){
     priceMap.get(r.type_name).push(r.price);
     sysCount.set(r.system_id,(sysCount.get(r.system_id)||0)+1);
     scatterPV.push({x:r.volume_remain,y:r.price});
-    days.push(Math.floor((Date.now()-new Date(r.issued).getTime())/86400000));
+    days.push(Math.trunc((Date.now()-new Date(r.issued).getTime())/86400000));
   }
 
     const topVol=[...volMap.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10);
