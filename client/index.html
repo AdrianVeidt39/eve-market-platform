@@ -109,6 +109,8 @@
         </table>
       </div>
       <p id="statsTableNote" class="note" style="display:none"></p>
+      <canvas id="chartStats"></canvas>
+      <p id="chartStatsNote" class="note" style="display:none"></p>
       <canvas id="chartDist"></canvas>
       <p id="chartDistNote" class="note" style="display:none"></p>
       <canvas id="chartHeat"></canvas>
@@ -305,7 +307,7 @@ let ordersRaw=[];
 let nameCache=new Map();
 let currentSort={k:"type_name",dir:1};
 let charts={};
-const chartIds=['chartVol','chartVal','chartDist','chartHeat','chartScatter','chartAge'];
+const chartIds=['chartVol','chartVal','chartStats','chartDist','chartHeat','chartScatter','chartAge'];
 
 function showChartNote(id,msg){
   const canvas=j('#'+id);
@@ -485,15 +487,21 @@ function generateCharts(){
     }
 
     if(topVal.length){
-      const statsRows=topVal.map(([name])=>{
+      const stats=topVal.map(([name])=>{
         const s=boxStats(priceMap.get(name)||[]);
-        return `<tr><td>${escapeHtml(name)}</td><td>${fmtPrice(s.min)}</td><td>${fmtPrice(s.q1)}</td><td>${fmtPrice(s.median)}</td><td>${fmtPrice(s.q3)}</td><td>${fmtPrice(s.max)}</td></tr>`;
-      }).join('');
+        return {name,s};
+      });
+      const statsRows=stats.map(({name,s})=>`<tr><td>${escapeHtml(name)}</td><td>${fmtPrice(s.min)}</td><td>${fmtPrice(s.q1)}</td><td>${fmtPrice(s.median)}</td><td>${fmtPrice(s.q3)}</td><td>${fmtPrice(s.max)}</td></tr>`).join('');
       statsTableBody.innerHTML=statsRows;
       statsTableWrap.style.display='block';
+      try{
+        const boxData=stats.map(x=>x.s);
+        charts.stats=new Chart(j('#chartStats'),{type:'boxplot',data:{labels:stats.map(x=>x.name),datasets:[{data:boxData,backgroundColor:palette.slice(0,boxData.length),parsing:false}]},options:{plugins:{legend:{display:false},title:{display:true,text:'Distribución de precios (top 10 ítems por valor) (Gráfico de cajas)'}}}});
+      }catch(e){ console.error(e); showChartNote('chartStats','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
       statsTableNote.textContent='No hay datos para la tabla.';
       statsTableNote.style.display='block';
+      showChartNote('chartStats','No hay datos para esta gráfica.');
     }
 
     const distItems=[...priceMap.entries()].sort((a,b)=>b[1].length-a[1].length).slice(0,10);
