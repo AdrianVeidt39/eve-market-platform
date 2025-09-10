@@ -389,9 +389,9 @@ function generateCharts(){
     if(r.price<minR.price) minR=r;
   }
   j('#kpiPanel').innerHTML=`
-    <div class="kpi"><div class="num">${fmtBig(totalVol)}</div><div>Volumen total</div></div>
-    <div class="kpi"><div class="num">${fmtBig(totalISK)}</div><div>ISK total</div></div>
-    <div class="kpi"><div class="num">${items.size}</div><div>Ítems únicos</div></div>
+    <div class="kpi"><div class="num">${fmtBig(totalVol)}</div><div>Cantidad ofertada total</div></div>
+    <div class="kpi"><div class="num">${fmtBig(totalISK)}</div><div>Precio total</div></div>
+    <div class="kpi"><div class="num">${items.size}</div><div>Artículos únicos</div></div>
     <div class="kpi"><div class="num">${escapeHtml(maxR.type_name)}</div><div>Más caro (${fmtPrice(maxR.price)})</div></div>
     <div class="kpi"><div class="num">${escapeHtml(minR.type_name)}</div><div>Más barato (${fmtPrice(minR.price)})</div></div>`;
 
@@ -418,7 +418,7 @@ function generateCharts(){
     const topVol=[...volMap.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10);
     if(topVol.length){
       try{
-        charts.vol=new Chart(j('#chartVol'),{type:'bar',data:{labels:topVol.map(x=>x[0]),datasets:[{data:topVol.map(x=>x[1]),backgroundColor:palette.slice(0,topVol.length)}]},options:{indexAxis:'y',plugins:{legend:{display:false},title:{display:true,text:'Top 10 ítems por volumen (Gráfico de barras)'}}}});
+        charts.vol=new Chart(j('#chartVol'),{type:'bar',data:{labels:topVol.map(x=>x[0]),datasets:[{data:topVol.map(x=>x[1]),backgroundColor:palette.slice(0,topVol.length)}]},options:{indexAxis:'y',plugins:{legend:{display:false},title:{display:true,text:'Top 10 artículos por cantidad ofertada (Gráfico de barras)'}}}});
       }catch(e){ console.error(e); showChartNote('chartVol','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
       showChartNote('chartVol','No hay datos para esta gráfica.');
@@ -427,7 +427,7 @@ function generateCharts(){
     const topVal=[...valMap.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10);
     if(topVal.length){
       try{
-        charts.val=new Chart(j('#chartVal'),{type:'bar',data:{labels:topVal.map(x=>x[0]),datasets:[{data:topVal.map(x=>x[1]),backgroundColor:palette.slice(0,topVal.length)}]},options:{indexAxis:'y',plugins:{legend:{display:false},title:{display:true,text:'Top 10 ítems por valor (Gráfico de barras)'}}}});
+        charts.val=new Chart(j('#chartVal'),{type:'bar',data:{labels:topVal.map(x=>x[0]),datasets:[{data:topVal.map(x=>x[1]),backgroundColor:palette.slice(0,topVal.length)}]},options:{indexAxis:'y',plugins:{legend:{display:false},title:{display:true,text:'Top 10 artículos por precio total (Gráfico de barras)'}}}});
       }catch(e){ console.error(e); showChartNote('chartVal','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
       showChartNote('chartVal','No hay datos para esta gráfica.');
@@ -436,7 +436,7 @@ function generateCharts(){
     const distItems=[...priceMap.entries()].sort((a,b)=>b[1].length-a[1].length).slice(0,10);
     if(distItems.length){
       try{
-        charts.dist=new Chart(j('#chartDist'),{type:'boxplot',data:{labels:distItems.map(x=>x[0]),datasets:[{data:distItems.map(x=>x[1]),backgroundColor:palette.slice(0,distItems.length)}]},options:{plugins:{legend:{display:false},title:{display:true,text:'Distribución de precios (top 10 ítems) (Gráfico de cajas)'}}}});
+        charts.dist=new Chart(j('#chartDist'),{type:'boxplot',data:{labels:distItems.map(x=>x[0]),datasets:[{data:distItems.map(x=>x[1]),backgroundColor:palette.slice(0,distItems.length)}]},options:{plugins:{legend:{display:false},title:{display:true,text:'Distribución de precios (top 10 artículos) (Gráfico de cajas)'}}}});
       }catch(e){ console.error(e); showChartNote('chartDist','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
       showChartNote('chartDist','No hay datos suficientes para esta gráfica.');
@@ -458,7 +458,7 @@ function generateCharts(){
 
     if(scatterPV.length){
       try{
-        charts.scatter=new Chart(j('#chartScatter'),{type:'scatter',data:{datasets:[{data:scatterPV,backgroundColor:'rgba(0,209,178,0.5)',borderColor:'var(--accent2)'}]},options:{plugins:{legend:{display:false},title:{display:true,text:'Precio vs volumen (Gráfico de dispersión)'}},scales:{x:{title:{display:true,text:'Volumen'}},y:{title:{display:true,text:'Precio'}}}}});
+        charts.scatter=new Chart(j('#chartScatter'),{type:'scatter',data:{datasets:[{data:scatterPV,backgroundColor:'rgba(0,209,178,0.5)',borderColor:'var(--accent2)'}]},options:{plugins:{legend:{display:false},title:{display:true,text:'Precio vs cantidad ofertada (Gráfico de dispersión)'}},scales:{x:{title:{display:true,text:'Cantidad ofertada'}},y:{title:{display:true,text:'Precio'}}}}});
       }catch(e){ console.error(e); showChartNote('chartScatter','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
       showChartNote('chartScatter','No hay datos para esta gráfica.');
@@ -467,7 +467,7 @@ function generateCharts(){
     const maxDay=Math.max(...days,0); const bins=Array.from({length:Math.min(maxDay+1,30)},()=>0); days.forEach(d=>{ if(d<bins.length) bins[d]++; else bins[bins.length-1]++; });
     if(bins.some(v=>v>0)){
       try{
-        charts.age=new Chart(j('#chartAge'),{type:'bar',data:{labels:bins.map((_,i)=>i===bins.length-1?`${i}+`:String(i)),datasets:[{data:bins,backgroundColor:palette.slice(0,bins.length)}]},options:{plugins:{legend:{display:false},title:{display:true,text:'Antigüedad de órdenes (Gráfico de barras)'}},scales:{x:{title:{display:true,text:'Días desde emisión'}},y:{title:{display:true,text:'Órdenes'}}}}});
+        charts.age=new Chart(j('#chartAge'),{type:'bar',data:{labels:bins.map((_,i)=>i===bins.length-1?`${i}+`:String(i)),datasets:[{data:bins,backgroundColor:palette.slice(0,bins.length)}]},options:{plugins:{legend:{display:false},title:{display:true,text:'Antigüedad de órdenes (Gráfico de barras)'}},scales:{x:{title:{display:true,text:'Días desde "Emitida"'}},y:{title:{display:true,text:'Órdenes'}}}}});
       }catch(e){ console.error(e); showChartNote('chartAge','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
       showChartNote('chartAge','No hay datos suficientes para esta gráfica.');
