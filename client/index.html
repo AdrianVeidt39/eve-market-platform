@@ -87,10 +87,26 @@
     <div id="analytics" class="card" style="margin-top:16px;display:none">
       <div class="section-title">Visualizaciones</div>
       <div id="kpiPanel" class="kpis"></div>
-      <canvas id="chartVol"></canvas>
-      <p id="chartVolNote" class="note" style="display:none"></p>
-      <canvas id="chartVal"></canvas>
-      <p id="chartValNote" class="note" style="display:none"></p>
+      <div class="row">
+        <div>
+          <canvas id="chartVol"></canvas>
+          <p id="chartVolNote" class="note" style="display:none"></p>
+        </div>
+        <div>
+          <canvas id="chartVolBottom"></canvas>
+          <p id="chartVolBottomNote" class="note" style="display:none"></p>
+        </div>
+      </div>
+      <div class="row">
+        <div>
+          <canvas id="chartVal"></canvas>
+          <p id="chartValNote" class="note" style="display:none"></p>
+        </div>
+        <div>
+          <canvas id="chartValBottom"></canvas>
+          <p id="chartValBottomNote" class="note" style="display:none"></p>
+        </div>
+      </div>
       <div id="statsTableWrap" class="table-wrap" style="display:none">
         <table id="statsTable">
           <thead>
@@ -305,7 +321,7 @@ let ordersRaw=[];
 let nameCache=new Map();
 let currentSort={k:"type_name",dir:1};
 let charts={};
-const chartIds=['chartVol','chartVal','chartStats','chartDist','chartHeat','chartScatter','chartAge'];
+const chartIds=['chartVol','chartVolBottom','chartVal','chartValBottom','chartStats','chartDist','chartHeat','chartScatter','chartAge'];
 
 function showChartNote(id,msg){
   const canvas=j('#'+id);
@@ -467,6 +483,7 @@ function generateCharts(){
   }
 
     const topVol=[...volMap.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10);
+    const bottomVol=[...volMap.entries()].filter(([,v])=>v>0).sort((a,b)=>a[1]-b[1]).slice(0,10);
     if(topVol.length){
       try{
         charts.vol=new Chart(j('#chartVol'),{
@@ -494,7 +511,35 @@ function generateCharts(){
       showChartNote('chartVol','No hay datos para esta gráfica.');
     }
 
+    if(bottomVol.length){
+      try{
+        charts.volBottom=new Chart(j('#chartVolBottom'),{
+          type:'bar',
+          data:{
+            labels:bottomVol.map(x=>x[0]),
+            datasets:[{
+              data:bottomVol.map(x=>x[1]),
+              backgroundColor:palette.slice(0,bottomVol.length),
+              barPercentage:0.375,
+              categoryPercentage:0.8
+            }]
+          },
+          options:{
+            indexAxis:'y',
+            aspectRatio:3.5556,
+            plugins:{
+              legend:{display:false},
+              title:{display:true,text:'Bottom 10 ítems por unidades (Gráfico de barras)'}
+            }
+          }
+        });
+      }catch(e){ console.error(e); showChartNote('chartVolBottom','No se pudo generar la gráfica con los datos actuales.'); }
+    } else {
+      showChartNote('chartVolBottom','No hay datos para esta gráfica.');
+    }
+
     const topVal=[...valMap.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10);
+    const bottomVal=[...valMap.entries()].filter(([,v])=>v>0).sort((a,b)=>a[1]-b[1]).slice(0,10);
     if(topVal.length){
       try{
         charts.val=new Chart(j('#chartVal'),{
@@ -520,6 +565,33 @@ function generateCharts(){
       }catch(e){ console.error(e); showChartNote('chartVal','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
       showChartNote('chartVal','No hay datos para esta gráfica.');
+    }
+
+    if(bottomVal.length){
+      try{
+        charts.valBottom=new Chart(j('#chartValBottom'),{
+          type:'bar',
+          data:{
+            labels:bottomVal.map(x=>x[0]),
+            datasets:[{
+              data:bottomVal.map(x=>x[1]),
+              backgroundColor:palette.slice(0,bottomVal.length),
+              barPercentage:0.375,
+              categoryPercentage:0.8
+            }]
+          },
+          options:{
+            indexAxis:'y',
+            aspectRatio:3.5556,
+            plugins:{
+              legend:{display:false},
+              title:{display:true,text:'Bottom 10 ítems por valor (Gráfico de barras)'}
+            }
+          }
+        });
+      }catch(e){ console.error(e); showChartNote('chartValBottom','No se pudo generar la gráfica con los datos actuales.'); }
+    } else {
+      showChartNote('chartValBottom','No hay datos para esta gráfica.');
     }
 
     if(topVal.length){
