@@ -189,6 +189,8 @@ const fmtBig = n=>{
 const sleep = ms=>new Promise(r=>setTimeout(r,ms));
 const palette = ['#30a3ff','#00d1b2','#ff6b6b','#ffc107','#9b59b6','#e67e22','#2ecc71','#f39c12','#8e44ad','#1abc9c'];
 
+Chart.defaults.color = '#fff';
+
 const LOG_ESI = true; // Desactiva en producción
 
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 24h
