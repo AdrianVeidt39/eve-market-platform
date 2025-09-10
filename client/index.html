@@ -169,7 +169,13 @@ const ESI = "https://esi.evetech.net/latest";
 const j = s=>document.querySelector(s);
 const fmtPrice = n=>Number(n).toLocaleString("es-MX",{maximumFractionDigits:2});
 const fmtInt = n=>Number(n).toLocaleString("es-MX",{maximumFractionDigits:0});
-const fmtBig = n=>new Intl.NumberFormat("es-MX",{notation:"compact",maximumFractionDigits:1}).format(n);
+const fmtBig = n=>{
+  const abs=Math.abs(n); const opts={maximumFractionDigits:1};
+  if(abs>=1e9) return (n/1e9).toLocaleString("es-MX",opts)+" mil M";
+  if(abs>=1e6) return (n/1e6).toLocaleString("es-MX",opts)+" M";
+  if(abs>=1e3) return (n/1e3).toLocaleString("es-MX",opts)+" mil";
+  return Number(n).toLocaleString("es-MX",{maximumFractionDigits:0});
+};
 const sleep = ms=>new Promise(r=>setTimeout(r,ms));
 const palette = ['#30a3ff','#00d1b2','#ff6b6b','#ffc107','#9b59b6','#e67e22','#2ecc71','#f39c12','#8e44ad','#1abc9c'];
 
@@ -373,8 +379,8 @@ function generateCharts(){
     if(r.price<minR.price) minR=r;
   }
   j('#kpiPanel').innerHTML=`
-    <div class="kpi"><div class="num">${fmtInt(totalVol)}</div><div>Volumen total</div></div>
-    <div class="kpi"><div class="num">${fmtPrice(totalISK)}</div><div>ISK total</div></div>
+    <div class="kpi"><div class="num">${fmtBig(totalVol)}</div><div>Volumen total</div></div>
+    <div class="kpi"><div class="num">${fmtBig(totalISK)}</div><div>ISK total</div></div>
     <div class="kpi"><div class="num">${items.size}</div><div>Ítems únicos</div></div>
     <div class="kpi"><div class="num">${escapeHtml(maxR.type_name)}</div><div>Más caro (${fmtPrice(maxR.price)})</div></div>
     <div class="kpi"><div class="num">${escapeHtml(minR.type_name)}</div><div>Más barato (${fmtPrice(minR.price)})</div></div>`;
