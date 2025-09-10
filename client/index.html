@@ -93,6 +93,22 @@
       <p id="chartVolNote" class="note" style="display:none"></p>
       <canvas id="chartVal"></canvas>
       <p id="chartValNote" class="note" style="display:none"></p>
+      <div id="statsTableWrap" class="table-wrap" style="display:none">
+        <table id="statsTable">
+          <thead>
+            <tr>
+              <th>Ítem</th>
+              <th>Min</th>
+              <th>Q1</th>
+              <th>Mediana</th>
+              <th>Q3</th>
+              <th>Max</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p id="statsTableNote" class="note" style="display:none"></p>
       <canvas id="chartDist"></canvas>
       <p id="chartDistNote" class="note" style="display:none"></p>
       <canvas id="chartHeat"></canvas>
@@ -426,6 +442,14 @@ function generateCharts(){
     charts={};
     chartIds.forEach(hideChartNote);
 
+    const statsTableWrap=j('#statsTableWrap');
+    const statsTableBody=j('#statsTable tbody');
+    const statsTableNote=j('#statsTableNote');
+    statsTableWrap.style.display='none';
+    statsTableBody.innerHTML='';
+    statsTableNote.style.display='none';
+    statsTableNote.textContent='';
+
   const volMap=new Map();
   const valMap=new Map();
   const priceMap=new Map();
@@ -458,6 +482,18 @@ function generateCharts(){
       }catch(e){ console.error(e); showChartNote('chartVal','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
       showChartNote('chartVal','No hay datos para esta gráfica.');
+    }
+
+    if(topVal.length){
+      const statsRows=topVal.map(([name])=>{
+        const s=boxStats(priceMap.get(name)||[]);
+        return `<tr><td>${escapeHtml(name)}</td><td>${fmtPrice(s.min)}</td><td>${fmtPrice(s.q1)}</td><td>${fmtPrice(s.median)}</td><td>${fmtPrice(s.q3)}</td><td>${fmtPrice(s.max)}</td></tr>`;
+      }).join('');
+      statsTableBody.innerHTML=statsRows;
+      statsTableWrap.style.display='block';
+    } else {
+      statsTableNote.textContent='No hay datos para la tabla.';
+      statsTableNote.style.display='block';
     }
 
     const distItems=[...priceMap.entries()].sort((a,b)=>b[1].length-a[1].length).slice(0,10);
