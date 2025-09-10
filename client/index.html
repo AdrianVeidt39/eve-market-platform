@@ -117,6 +117,7 @@
           <thead>
             <tr class="head">
               <th class="sortable" data-k="type_name">Tipo</th>
+              <th class="sortable" data-k="order_type">Orden</th>
               <th class="sortable" data-k="price">Precio</th>
               <th class="sortable" data-k="volume_remain">Volumen</th>
               <th class="sortable" data-k="min_volume">Mín.</th>
@@ -128,6 +129,13 @@
             </tr>
             <tr class="filters">
               <th><input id="fType" type="text" placeholder="Tipo (ej. Antimatter)"/></th>
+              <th>
+                <select id="fSide">
+                  <option value="all">Todas</option>
+                  <option value="sell">Venta</option>
+                  <option value="buy">Compra</option>
+                </select>
+              </th>
               <th><div class="hstack"><input id="fPriceMin" type="number" placeholder="Precio mín." step="0.01"/><input id="fPriceMax" type="number" placeholder="Precio máx." step="0.01"/></div></th>
               <th><input id="fVol" type="number" placeholder="Volumen mín."/></th>
               <th><input id="fMin" type="number" placeholder="Mín. por orden"/></th>
@@ -358,13 +366,13 @@ async function queryMarket(){
 }
 function filterAndPush(arr){ for(const o of arr){ if(stationsInConstellation.has(o.location_id)) ordersRaw.push(o); } }
 
-function currentFilters(){ return { type:j('#fType').value.trim().toLowerCase(), pmin:parseFloat(j('#fPriceMin').value||'NaN'), pmax:parseFloat(j('#fPriceMax').value||'NaN'), vmin:parseInt(j('#fVol').value||'NaN'), mmin:parseInt(j('#fMin').value||'NaN'), range:j('#fRange').value, system:j('#fSystem').value, station:j('#fStation').value, issued:j('#fIssued').value, duration:j('#fDuration').value }; }
-function mapOrder(o){ const sysId=stationToSystem.get(o.location_id); return { type_id:o.type_id, type_name:nameCache.get(o.type_id)||o.type_id, price:o.price, volume_remain:o.volume_remain, min_volume:o.min_volume, range:o.range, station_id:o.location_id, station_name:nameCache.get(o.location_id)||o.location_id, system_id:sysId, system_name:systemNameMap.get(sysId)||sysId, issued:o.issued, duration:o.duration }; }
-function applyFilters(rows,f){ return rows.filter(r=>{ if(f.type&&!(""+r.type_name).toLowerCase().includes(f.type))return false; if(!Number.isNaN(f.pmin)&&r.price<f.pmin)return false; if(!Number.isNaN(f.pmax)&&r.price>f.pmax)return false; if(!Number.isNaN(f.vmin)&&r.volume_remain<f.vmin)return false; if(!Number.isNaN(f.mmin)&&r.min_volume<f.mmin)return false; if(f.range!=='all'&&(""+r.range)!==f.range)return false; if(f.system!=='all'&&(""+r.system_id)!==f.system)return false; if(f.station!=='all'&&(""+r.station_id)!==f.station)return false; if(f.issued!=='all'){ const d=isoDaysAgo(r.issued); if(f.issued==='24h'&&d>1)return false; if(f.issued==='7d'&&d>7)return false; if(f.issued==='30d'&&d>30)return false;} if(f.duration!=='all'&&(""+r.duration)!==(f.duration))return false; return true; }); }
+function currentFilters(){ return { type:j('#fType').value.trim().toLowerCase(), side:j('#fSide').value, pmin:parseFloat(j('#fPriceMin').value||'NaN'), pmax:parseFloat(j('#fPriceMax').value||'NaN'), vmin:parseInt(j('#fVol').value||'NaN'), mmin:parseInt(j('#fMin').value||'NaN'), range:j('#fRange').value, system:j('#fSystem').value, station:j('#fStation').value, issued:j('#fIssued').value, duration:j('#fDuration').value }; }
+function mapOrder(o){ const sysId=stationToSystem.get(o.location_id); return { type_id:o.type_id, type_name:nameCache.get(o.type_id)||o.type_id, order_type:o.is_buy_order?'buy':'sell', price:o.price, volume_remain:o.volume_remain, min_volume:o.min_volume, range:o.range, station_id:o.location_id, station_name:nameCache.get(o.location_id)||o.location_id, system_id:sysId, system_name:systemNameMap.get(sysId)||sysId, issued:o.issued, duration:o.duration }; }
+function applyFilters(rows,f){ return rows.filter(r=>{ if(f.type&&!(""+r.type_name).toLowerCase().includes(f.type))return false; if(f.side!=='all'&&r.order_type!==f.side)return false; if(!Number.isNaN(f.pmin)&&r.price<f.pmin)return false; if(!Number.isNaN(f.pmax)&&r.price>f.pmax)return false; if(!Number.isNaN(f.vmin)&&r.volume_remain<f.vmin)return false; if(!Number.isNaN(f.mmin)&&r.min_volume<f.mmin)return false; if(f.range!=='all'&&(""+r.range)!==f.range)return false; if(f.system!=='all'&&(""+r.system_id)!==f.system)return false; if(f.station!=='all'&&(""+r.station_id)!==f.station)return false; if(f.issued!=='all'){ const d=isoDaysAgo(r.issued); if(f.issued==='24h'&&d>1)return false; if(f.issued==='7d'&&d>7)return false; if(f.issued==='30d'&&d>30)return false;} if(f.duration!=='all'&&(""+r.duration)!==(f.duration))return false; return true; }); }
 function getFilteredRows(){ let rows=ordersRaw.map(mapOrder); const f=currentFilters(); rows=applyFilters(rows,f); return sortBy(rows,currentSort.k,currentSort.dir); }
-function render(){ const tbody=j('#ordersTable tbody'); const rows=getFilteredRows(); j('#ordersCount').textContent=fmtInt(rows.length); if(!ordersRaw.length) j('#pagesInfo').textContent='0 / 0 páginas'; const disable=rows.length===0; j('#exportBtn').disabled=disable; j('#chartsBtn').disabled=disable; tbody.innerHTML=rows.map(r=>`<tr><td>${escapeHtml(r.type_name)}</td><td>${fmtPrice(r.price)}</td><td>${fmtInt(r.volume_remain)}</td><td>${fmtInt(r.min_volume)}</td><td>${r.range}</td><td>${escapeHtml(r.system_name)}</td><td>${escapeHtml(r.station_name)}</td><td><span class="muted" title="${r.issued}">${new Date(r.issued).toLocaleString("es-MX")}</span></td><td>${r.duration}</td></tr>`).join(''); }
+function render(){ const tbody=j('#ordersTable tbody'); const rows=getFilteredRows(); j('#ordersCount').textContent=fmtInt(rows.length); if(!ordersRaw.length) j('#pagesInfo').textContent='0 / 0 páginas'; const disable=rows.length===0; j('#exportBtn').disabled=disable; j('#chartsBtn').disabled=disable; tbody.innerHTML=rows.map(r=>`<tr><td>${escapeHtml(r.type_name)}</td><td>${r.order_type==='sell'?'Venta':'Compra'}</td><td>${fmtPrice(r.price)}</td><td>${fmtInt(r.volume_remain)}</td><td>${fmtInt(r.min_volume)}</td><td>${r.range}</td><td>${escapeHtml(r.system_name)}</td><td>${escapeHtml(r.station_name)}</td><td><span class="muted" title="${r.issued}">${new Date(r.issued).toLocaleString("es-MX")}</span></td><td>${r.duration}</td></tr>`).join(''); }
 function escapeHtml(s){ return (""+s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[m])); }
-function exportCSV(){ let rows=ordersRaw.map(mapOrder); rows=applyFilters(rows,currentFilters()); rows=sortBy(rows,currentSort.k,currentSort.dir); const headers=["type_name","price","volume_remain","min_volume","range","system_name","station_name","issued","duration"]; const csv=[headers.join(",")].concat(rows.map(r=>[`"${(""+r.type_name).replace(/"/g,'""')}"`,r.price,r.volume_remain,r.min_volume,r.range,`"${(""+r.system_name).replace(/"/g,'""')}"`,`"${(""+r.station_name).replace(/"/g,'""')}"`,r.issued,r.duration].join(","))).join("\n"); const blob=new Blob([csv],{type:"text/csv;charset=utf-8"}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='ordenes_eve.csv'; a.click(); URL.revokeObjectURL(url); }
+function exportCSV(){ let rows=ordersRaw.map(mapOrder); rows=applyFilters(rows,currentFilters()); rows=sortBy(rows,currentSort.k,currentSort.dir); const headers=["type_name","order_type","price","volume_remain","min_volume","range","system_name","station_name","issued","duration"]; const csv=[headers.join(",")].concat(rows.map(r=>[`"${(""+r.type_name).replace(/"/g,'""')}"`,r.order_type,r.price,r.volume_remain,r.min_volume,r.range,`"${(""+r.system_name).replace(/"/g,'""')}"`,`"${(""+r.station_name).replace(/"/g,'""')}"`,r.issued,r.duration].join(","))).join("\n"); const blob=new Blob([csv],{type:"text/csv;charset=utf-8"}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='ordenes_eve.csv'; a.click(); URL.revokeObjectURL(url); }
 
 function generateCharts(){
   const rows=getFilteredRows();
@@ -471,7 +479,7 @@ j('#constellation').addEventListener('change',onConstellationChange);
 j('#queryBtn').addEventListener('click',queryMarket);
 j('#exportBtn').addEventListener('click',exportCSV);
 j('#chartsBtn').addEventListener('click',generateCharts);
-for(const id of ['fType','fPriceMin','fPriceMax','fVol','fMin','fRange','fSystem','fStation','fIssued','fDuration']){ j('#'+id).addEventListener('input',render); j('#'+id).addEventListener('change',render); }
+for(const id of ['fType','fSide','fPriceMin','fPriceMax','fVol','fMin','fRange','fSystem','fStation','fIssued','fDuration']){ j('#'+id).addEventListener('input',render); j('#'+id).addEventListener('change',render); }
 document.querySelectorAll('thead tr.head th.sortable').forEach(th=>{ th.addEventListener('click',()=>{ const k=th.dataset.k; if(!k) return; if(currentSort.k===k){ currentSort.dir*=-1; } else { currentSort.k=k; currentSort.dir=1; } render(); }); });
 
 (async function init(){ try{ await loadRegions(); } catch(e){ console.error(e); alert('Error cargando catálogos de ESI. Revisa tu conexión e inténtalo de nuevo.'); } })();
