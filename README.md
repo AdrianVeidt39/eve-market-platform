@@ -4,7 +4,7 @@ Static client to browse the EVE Online market by region, constellation and syste
 
 ## Usage
 
-Open `client/index.html` in a modern browser. The page loads region data from the public ESI API and guides you through selecting a constellation and system. Provide a product name (or leave empty for **Antimatter Charge**) and press **Consultar mercado** to list sell orders for every public station in the chosen system. Stations with no orders are highlighted.
+Open `client/index.html` in a modern browser. The page loads region data from the public ESI API and guides you through selecting a constellation. Press **Consultar mercado** to list buy and sell orders for every public station in the chosen constellation. Stations with no orders are highlighted.
 
 ## Development Notes
 
