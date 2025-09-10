@@ -46,6 +46,17 @@
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-box-and-violin-plot@4/dist/chartjs-chart-box-and-violin-plot.min.js"></script>
+<script>
+  if (window.ChartjsChartBoxAndViolinPlot) {
+    const {
+      BoxPlotController,
+      BoxAndWhisker,
+      ViolinController,
+      Violin,
+    } = ChartjsChartBoxAndViolinPlot;
+    Chart.register(BoxPlotController, BoxAndWhisker, ViolinController, Violin);
+  }
+</script>
 </head>
 <body>
   <div class="wrap">
