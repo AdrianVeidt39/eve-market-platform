@@ -106,7 +106,7 @@
           <p id="chartVolBottomNote" class="note" style="display:none"></p>
         </div>
       </div>
-      <div id="statsTableTitle" class="chart-title" style="display:none">Distribución de precios (top 10 ítems por precio) (Tabla)</div>
+      <div id="statsTableTitle" class="chart-title" style="display:none">Distribución de precios (top 10 ítems por órdenes) (Tabla)</div>
       <div id="statsTableWrap" class="table-wrap" style="display:none;margin-bottom:16px">
         <table id="statsTable">
           <thead>
@@ -770,8 +770,8 @@ function generateCharts(){
       showChartNote('chartOrdersBottom','No hay datos para esta gráfica.');
     }
 
-    if(topPrice.length){
-      const stats = topPrice.map(([name])=>{
+    if(topOrders.length){
+      const stats = topOrders.map(([name])=>{
         const prices = (priceMap.get(name)||[]).filter(Number.isFinite);
         return {name,prices};
       }).filter(x=>x.prices.length>0)
@@ -788,7 +788,7 @@ function generateCharts(){
             j('#chartDist'),
             stats.map(x=>x.name),
             stats.map(x=>x.s),
-            'Distribución de precios (top 10 ítems por precio) (Gráfico de cajas)'
+            'Distribución de precios (top 10 ítems por órdenes) (Gráfico de cajas)'
           );
         }catch(e){ console.error(e); showChartNote('chartDist','No se pudo generar la gráfica con los datos actuales.'); }
       } else {
