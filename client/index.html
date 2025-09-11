@@ -247,6 +247,48 @@ const boxStats = arr => {
   };
 };
 
+const flatLinePlugin = colors => ({
+  id:'flatLine',
+  afterDatasetsDraw(chart){
+    const {ctx,scales:{y}} = chart;
+    const meta = chart.getDatasetMeta(0);
+    meta.data.forEach((bar,i)=>{
+      const v = chart.data.datasets[0].data[i];
+      const yPos = y.getPixelForValue(v);
+      const half = bar.width / 2;
+      ctx.save();
+      ctx.strokeStyle = colors[i] || '#fff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(bar.x - half, yPos);
+      ctx.lineTo(bar.x + half, yPos);
+      ctx.stroke();
+      ctx.restore();
+    });
+  }
+});
+
+function renderBoxChart(el, labels, boxData, title){
+  const gMin = Math.min(...boxData.map(d=>d.min));
+  const gMax = Math.max(...boxData.map(d=>d.max));
+  const colors = palette.slice(0, labels.length);
+  if(gMin === gMax){
+    const v = gMin;
+    const delta = v === 0 ? 1 : Math.abs(v) * 0.05;
+    return new Chart(el,{
+      type:'bar',
+      data:{labels,datasets:[{data:labels.map(()=>v),backgroundColor:'transparent',borderColor:'transparent'}]},
+      options:{plugins:{legend:{display:false},title:{display:true,text:title}},scales:{y:{min:v-delta,max:v+delta}}},
+      plugins:[flatLinePlugin(colors)]
+    });
+  }
+  return new Chart(el,{
+    type:'boxplot',
+    data:{labels,datasets:[{data:boxData,backgroundColor:colors,parsing:false}]},
+    options:{plugins:{legend:{display:false},title:{display:true,text:title}}}
+  });
+}
+
 Chart.defaults.color = '#fff';
 
 const LOG_ESI = true; // Desactiva en producción
@@ -609,7 +651,12 @@ function generateCharts(){
       statsTableTitle.style.display='block';
       try{
         const boxData=stats.map(x=>x.s);
-        charts.stats=new Chart(j('#chartStats'),{type:'boxplot',data:{labels:stats.map(x=>x.name),datasets:[{data:boxData,backgroundColor:palette.slice(0,boxData.length),parsing:false}]},options:{plugins:{legend:{display:false},title:{display:true,text:'Distribución de precios (top 10 ítems por valor) (Gráfico de cajas)'}}}});
+        charts.stats=renderBoxChart(
+          j('#chartStats'),
+          stats.map(x=>x.name),
+          boxData,
+          'Distribución de precios (top 10 ítems por valor) (Gráfico de cajas)'
+        );
       }catch(e){ console.error(e); showChartNote('chartStats','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
       statsTableNote.textContent='No hay datos para la tabla.';
@@ -621,7 +668,12 @@ function generateCharts(){
     if(distItems.length){
       try{
         const distData=distItems.map(x=>boxStats(x[1]));
-        charts.dist=new Chart(j('#chartDist'),{type:'boxplot',data:{labels:distItems.map(x=>x[0]),datasets:[{data:distData,backgroundColor:palette.slice(0,distData.length),parsing:false}]},options:{plugins:{legend:{display:false},title:{display:true,text:'Distribución de precios (top 10 ítems) (Gráfico de cajas)'}}}});
+        charts.dist=renderBoxChart(
+          j('#chartDist'),
+          distItems.map(x=>x[0]),
+          distData,
+          'Distribución de precios (top 10 ítems) (Gráfico de cajas)'
+        );
       }catch(e){ console.error(e); showChartNote('chartDist','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
       showChartNote('chartDist','No hay datos suficientes para esta gráfica.');
