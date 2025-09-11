@@ -41,6 +41,7 @@
   .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px}
   .kpi{background:var(--chip);border:1px solid var(--border);border-radius:12px;padding:12px;text-align:center}
   .kpi .num{font-size:20px;font-weight:700;color:var(--accent2)}
+  .chart-title{text-align:center;font-weight:700;margin:18px 0 10px}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-box-and-violin-plot@4/dist/chartjs-chart-box-and-violin-plot.min.js"></script>
@@ -107,7 +108,8 @@
           <p id="chartValBottomNote" class="note" style="display:none"></p>
         </div>
       </div>
-      <div id="statsTableWrap" class="table-wrap" style="display:none">
+      <div id="statsTableTitle" class="chart-title" style="display:none">Distribución de precios (top 10 ítems por valor) (Tabla)</div>
+      <div id="statsTableWrap" class="table-wrap" style="display:none;margin-bottom:16px">
         <table id="statsTable">
           <thead>
             <tr>
@@ -122,7 +124,7 @@
           <tbody></tbody>
         </table>
       </div>
-      <p id="statsTableNote" class="note" style="display:none"></p>
+      <p id="statsTableNote" class="note" style="display:none;margin-bottom:16px"></p>
       <canvas id="chartStats"></canvas>
       <p id="chartStatsNote" class="note" style="display:none"></p>
       <canvas id="chartDist"></canvas>
@@ -461,10 +463,12 @@ function generateCharts(){
     const statsTableWrap=j('#statsTableWrap');
     const statsTableBody=j('#statsTable tbody');
     const statsTableNote=j('#statsTableNote');
+    const statsTableTitle=j('#statsTableTitle');
     statsTableWrap.style.display='none';
     statsTableBody.innerHTML='';
     statsTableNote.style.display='none';
     statsTableNote.textContent='';
+    statsTableTitle.style.display='none';
 
   const volMap=new Map();
   const valMap=new Map();
@@ -602,6 +606,7 @@ function generateCharts(){
       const statsRows=stats.map(({name,s})=>`<tr><td>${escapeHtml(name)}</td><td>${fmtPrice(s.min)}</td><td>${fmtPrice(s.q1)}</td><td>${fmtPrice(s.median)}</td><td>${fmtPrice(s.q3)}</td><td>${fmtPrice(s.max)}</td></tr>`).join('');
       statsTableBody.innerHTML=statsRows;
       statsTableWrap.style.display='block';
+      statsTableTitle.style.display='block';
       try{
         const boxData=stats.map(x=>x.s);
         charts.stats=new Chart(j('#chartStats'),{type:'boxplot',data:{labels:stats.map(x=>x.name),datasets:[{data:boxData,backgroundColor:palette.slice(0,boxData.length),parsing:false}]},options:{plugins:{legend:{display:false},title:{display:true,text:'Distribución de precios (top 10 ítems por valor) (Gráfico de cajas)'}}}});
