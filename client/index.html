@@ -216,6 +216,26 @@ const styles = getComputedStyle(document.documentElement);
 const accentColor = styles.getPropertyValue('--accent') || '#30a3ff';
 const accent2Color = styles.getPropertyValue('--accent2') || '#00d1b2';
 
+// Ensure boxplot/violin controllers are registered when using the UMD bundle
+if (typeof ChartjsChartBoxAndViolinPlot !== 'undefined') {
+  const {
+    BoxPlotController,
+    BoxPlotChart,
+    BoxPlotElement,
+    ViolinPlotController,
+    ViolinPlotChart,
+    ViolinPlotElement
+  } = ChartjsChartBoxAndViolinPlot;
+  Chart.register(
+    BoxPlotController,
+    BoxPlotChart,
+    BoxPlotElement,
+    ViolinPlotController,
+    ViolinPlotChart,
+    ViolinPlotElement
+  );
+}
+
 const quantile = (arr, q) => {
   const sorted = arr.slice().sort((a,b)=>a-b);
   const pos = (sorted.length - 1) * q;
@@ -274,9 +294,10 @@ function renderBoxChart(el, labels, boxData, title){
       plugins:[flatLinePlugin(colors)]
     });
   }
+  const dataAsArrays = boxData.map(d=>[d.min,d.q1,d.median,d.q3,d.max]);
   return new Chart(el,{
     type:'boxplot',
-    data:{labels,datasets:[{data:boxData,backgroundColor:colors,parsing:false}]},
+    data:{labels,datasets:[{data:dataAsArrays,backgroundColor:colors}]},
     options:{plugins:{legend:{display:false},title:{display:true,text:title}}}
   });
 }
