@@ -98,6 +98,16 @@
           <p id="chartValBottomNote" class="note" style="display:none"></p>
         </div>
       </div>
+      <div class="row" style="grid-template-columns:1fr">
+        <div>
+          <canvas id="chartOrders"></canvas>
+          <p id="chartOrdersNote" class="note" style="display:none"></p>
+        </div>
+        <div>
+          <canvas id="chartOrdersBottom"></canvas>
+          <p id="chartOrdersBottomNote" class="note" style="display:none"></p>
+        </div>
+      </div>
       <div id="statsTableTitle" class="chart-title" style="display:none">Distribución de precios (top 10 ítems por precio) (Tabla)</div>
       <div id="statsTableWrap" class="table-wrap" style="display:none;margin-bottom:16px">
         <table id="statsTable">
@@ -406,7 +416,7 @@ let ordersRaw=[];
 let nameCache=new Map();
 let currentSort={k:"type_name",dir:1};
 let charts={};
-const chartIds=['chartVol','chartVolBottom','chartVal','chartValBottom','chartDist','chartHeat','chartScatter','chartAge'];
+const chartIds=['chartVol','chartVolBottom','chartVal','chartValBottom','chartOrders','chartOrdersBottom','chartDist','chartHeat','chartScatter','chartAge'];
 
 function showChartNote(id,msg){
   const canvas=j('#'+id);
@@ -555,6 +565,7 @@ function generateCharts(){
 
   const volMap=new Map();
   const priceMap=new Map();
+  const orderCount=new Map();
   const sysCount=new Map();
   const scatterPV=[];
   const days=[];
@@ -562,6 +573,7 @@ function generateCharts(){
     volMap.set(r.type_name,(volMap.get(r.type_name)||0)+r.volume_remain);
     if(!priceMap.has(r.type_name)) priceMap.set(r.type_name,[]);
     priceMap.get(r.type_name).push(r.price);
+    orderCount.set(r.type_name,(orderCount.get(r.type_name)||0)+1);
     sysCount.set(r.system_id,(sysCount.get(r.system_id)||0)+1);
     scatterPV.push({x:r.volume_remain,y:r.price});
     days.push(Math.trunc((Date.now()-new Date(r.issued).getTime())/86400000));
@@ -683,6 +695,62 @@ function generateCharts(){
       }catch(e){ console.error(e); showChartNote('chartValBottom','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
       showChartNote('chartValBottom','No hay datos para esta gráfica.');
+    }
+
+    const topOrders=[...orderCount.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10);
+    const bottomOrders=[...orderCount.entries()].filter(([,v])=>v>0).sort((a,b)=>a[1]-b[1]).slice(0,10);
+    if(topOrders.length){
+      try{
+        charts.orders=new Chart(j('#chartOrders'),{
+          type:'bar',
+          data:{
+            labels:topOrders.map(x=>x[0]),
+            datasets:[{
+              data:topOrders.map(x=>x[1]),
+              backgroundColor:palette.slice(0,topOrders.length),
+              barPercentage:0.375,
+              categoryPercentage:0.8
+            }]
+          },
+          options:{
+            indexAxis:'y',
+            aspectRatio:3.5556,
+            plugins:{
+              legend:{display:false},
+              title:{display:true,text:'Top 10 ítems por órdenes (Gráfico de barras)'}
+            }
+          }
+        });
+      }catch(e){ console.error(e); showChartNote('chartOrders','No se pudo generar la gráfica con los datos actuales.'); }
+    } else {
+      showChartNote('chartOrders','No hay datos para esta gráfica.');
+    }
+
+    if(bottomOrders.length){
+      try{
+        charts.ordersBottom=new Chart(j('#chartOrdersBottom'),{
+          type:'bar',
+          data:{
+            labels:bottomOrders.map(x=>x[0]),
+            datasets:[{
+              data:bottomOrders.map(x=>x[1]),
+              backgroundColor:palette.slice(0,bottomOrders.length),
+              barPercentage:0.375,
+              categoryPercentage:0.8
+            }]
+          },
+          options:{
+            indexAxis:'y',
+            aspectRatio:3.5556,
+            plugins:{
+              legend:{display:false},
+              title:{display:true,text:'Bottom 10 ítems por órdenes (Gráfico de barras)'}
+            }
+          }
+        });
+      }catch(e){ console.error(e); showChartNote('chartOrdersBottom','No se pudo generar la gráfica con los datos actuales.'); }
+    } else {
+      showChartNote('chartOrdersBottom','No hay datos para esta gráfica.');
     }
 
     if(topPrice.length){
