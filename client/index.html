@@ -226,8 +226,10 @@ const accentColor = styles.getPropertyValue('--accent') || '#30a3ff';
 const accent2Color = styles.getPropertyValue('--accent2') || '#00d1b2';
 
 // Ensure boxplot/violin controllers are registered when using the UMD bundle
+let boxPlotAvailable = false;
 if (typeof ChartjsChartBoxAndViolinPlot === 'undefined') {
   console.warn('chartjs-chart-box-and-violin-plot plugin not loaded; boxplot features disabled');
+  boxPlotAvailable = false;
 } else {
   const {
     BoxPlotController,
@@ -245,6 +247,7 @@ if (typeof ChartjsChartBoxAndViolinPlot === 'undefined') {
     ViolinPlotChart,
     ViolinPlotElement
   );
+  boxPlotAvailable = true;
 }
 
 const quantile = (arr, q) => {
@@ -300,6 +303,10 @@ const flatLinePlugin = colors => ({
 });
 
 function renderBoxChart(el, labels, boxData, title){
+  if(!boxPlotAvailable){
+    if(typeof showChartNote==='function' && el && el.id) showChartNote(el.id,'La gráfica de cajas no está disponible.');
+    return null;
+  }
   const pairs=labels.map((label,i)=>({label,data:boxData[i]}));
   const valid=pairs.filter(p=>{
     const d=p.data||{};

@@ -36,8 +36,13 @@ let note=null;
 function showChartNote(id,msg){ note=[id,msg]; }
 class Chart{ constructor(el,config){ this.el=el; this.config=config;} }
 Chart.defaults={color:''};
+let boxPlotAvailable=true;
 
 function renderBoxChart(el, labels, boxData, title){
+  if(!boxPlotAvailable){
+    if(typeof showChartNote==='function' && el && el.id) showChartNote(el.id,'La gráfica de cajas no está disponible.');
+    return null;
+  }
   const pairs=labels.map((label,i)=>({label,data:boxData[i]}));
   const valid=pairs.filter(p=>{
     const d=p.data||{};
@@ -98,5 +103,13 @@ chart=renderBoxChart({id:'c2'}, ['A'], [
 ], 't');
 assert.strictEqual(chart, null);
 assert.deepStrictEqual(note, ['c2','No hay datos válidos para esta gráfica.']);
+
+boxPlotAvailable=false;
+note=null;
+chart=renderBoxChart({id:'c3'}, ['A'], [
+  {min:1,q1:1,median:1,q3:1,max:1}
+], 't');
+assert.strictEqual(chart, null);
+assert.deepStrictEqual(note, ['c3','La gráfica de cajas no está disponible.']);
 
 console.log('Tests passed');
