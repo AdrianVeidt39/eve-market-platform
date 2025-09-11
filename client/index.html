@@ -43,9 +43,9 @@
   .kpi .num{font-size:20px;font-weight:700;color:var(--accent2)}
   .chart-title{text-align:center;font-weight:700;margin:18px 0 10px}
 </style>
-<!-- Chart.js 4.3.0 + box-and-violin-plot 4.3.0: combinación soportada -->
+<!-- Chart.js 4.3.0 + box plot plugin -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.3.0/dist/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-box-and-violin-plot@4.3.0/build/index.umd.min.js"></script>
+<script src="boxplot.js"></script>
 </head>
 <body>
   <div class="wrap">
@@ -344,10 +344,14 @@ function renderBoxChart(el, labels, boxData, title){
     });
   }
   const dataAsArrays = boxData.map(d=>[d.min,d.q1,d.median,d.q3,d.max]);
+  fitBarHeight(el, labels.length);
   return new Chart(el,{
     type:'boxplot',
     data:{labels,datasets:[{data:dataAsArrays,backgroundColor:colors}]},
-    options:{plugins:{legend:{display:false},title:{display:true,text:title}}}
+    options:{
+      plugins:{legend:{display:false},title:{display:true,text:title}},
+      scales:{y:{min:gMin,max:gMax}}
+    }
   });
 }
 
