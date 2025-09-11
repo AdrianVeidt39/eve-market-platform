@@ -647,23 +647,17 @@ function generateCharts(){
       statsTableBody.innerHTML=statsRows;
       statsTableWrap.style.display='block';
       statsTableTitle.style.display='block';
-    } else {
-      statsTableNote.textContent='No hay datos para la tabla.';
-      statsTableNote.style.display='block';
-    }
-
-    const distItems=[...priceMap.entries()].sort((a,b)=>b[1].length-a[1].length).slice(0,10);
-    if(distItems.length){
       try{
-        const distData=distItems.map(x=>boxStats(x[1]));
         charts.dist=renderBoxChart(
           j('#chartDist'),
-          distItems.map(x=>x[0]),
-          distData,
-          'Distribución de precios (top 10 ítems) (Gráfico de cajas)'
+          stats.map(x=>x.name),
+          stats.map(x=>x.s),
+          'Distribución de precios (top 10 ítems por valor) (Gráfico de cajas)'
         );
       }catch(e){ console.error(e); showChartNote('chartDist','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
+      statsTableNote.textContent='No hay datos para la tabla.';
+      statsTableNote.style.display='block';
       showChartNote('chartDist','No hay datos suficientes para esta gráfica.');
     }
 
