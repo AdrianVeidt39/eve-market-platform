@@ -227,27 +227,32 @@ const accent2Color = styles.getPropertyValue('--accent2') || '#00d1b2';
 
 // Ensure boxplot/violin controllers are registered when using the UMD bundle
 let boxPlotAvailable = false;
-if (typeof ChartjsChartBoxAndViolinPlot === 'undefined') {
-  console.warn('chartjs-chart-box-and-violin-plot plugin not loaded; boxplot features disabled');
+try {
+  if (typeof ChartjsChartBoxAndViolinPlot !== 'undefined') {
+    const {
+      BoxPlotController,
+      BoxPlotChart,
+      BoxPlotElement,
+      ViolinPlotController,
+      ViolinPlotChart,
+      ViolinPlotElement
+    } = ChartjsChartBoxAndViolinPlot;
+    Chart.register(
+      BoxPlotController,
+      BoxPlotChart,
+      BoxPlotElement,
+      ViolinPlotController,
+      ViolinPlotChart,
+      ViolinPlotElement
+    );
+  }
+  boxPlotAvailable = !!Chart.registry.getController('boxplot');
+  if(!boxPlotAvailable){
+    console.warn('chartjs-chart-box-and-violin-plot plugin not loaded; boxplot features disabled');
+  }
+} catch(e){
+  console.warn('Error checking boxplot plugin:', e);
   boxPlotAvailable = false;
-} else {
-  const {
-    BoxPlotController,
-    BoxPlotChart,
-    BoxPlotElement,
-    ViolinPlotController,
-    ViolinPlotChart,
-    ViolinPlotElement
-  } = ChartjsChartBoxAndViolinPlot;
-  Chart.register(
-    BoxPlotController,
-    BoxPlotChart,
-    BoxPlotElement,
-    ViolinPlotController,
-    ViolinPlotChart,
-    ViolinPlotElement
-  );
-  boxPlotAvailable = true;
 }
 
 const quantile = (arr, q) => {
