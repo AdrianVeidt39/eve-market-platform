@@ -249,7 +249,15 @@ const quantile = (arr, q) => {
 
 const boxStats = arr => {
   if(!Array.isArray(arr) || arr.length===0) return null;
-  const sorted = arr.slice().sort((a,b)=>a-b);
+  const valid=arr.filter(v=>Number.isFinite(v));
+  if(valid.length!==arr.length){
+    console.warn('Valores no válidos descartados en boxStats:', arr.filter(v=>!Number.isFinite(v)));
+  }
+  if(valid.length===0){
+    console.warn('boxStats: no hay datos válidos tras la validación.');
+    return null;
+  }
+  const sorted = valid.slice().sort((a,b)=>a-b);
   return {
     min: sorted[0],
     q1: quantile(sorted, 0.25),
@@ -282,6 +290,23 @@ const flatLinePlugin = colors => ({
 });
 
 function renderBoxChart(el, labels, boxData, title){
+  const pairs=labels.map((label,i)=>({label,data:boxData[i]}));
+  const valid=pairs.filter(p=>{
+    const d=p.data||{};
+    return ['min','q1','median','q3','max'].every(k=>Number.isFinite(d[k]));
+  });
+  if(valid.length!==pairs.length){
+    console.warn('Puntos de caja descartados por no ser finitos:', pairs.filter(p=>{
+      const d=p.data||{};
+      return !['min','q1','median','q3','max'].every(k=>Number.isFinite(d[k]));
+    }));
+  }
+  if(valid.length===0){
+    if(typeof showChartNote==='function' && el && el.id) showChartNote(el.id,'No hay datos válidos para esta gráfica.');
+    return null;
+  }
+  labels=valid.map(p=>p.label);
+  boxData=valid.map(p=>p.data);
   const gMin = Math.min(...boxData.map(d=>d.min));
   const gMax = Math.max(...boxData.map(d=>d.max));
   const colors = palette.slice(0, labels.length);
