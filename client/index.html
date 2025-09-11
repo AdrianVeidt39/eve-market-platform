@@ -98,7 +98,7 @@
           <p id="chartValBottomNote" class="note" style="display:none"></p>
         </div>
       </div>
-      <div id="statsTableTitle" class="chart-title" style="display:none">Distribución de precios (top 10 ítems por valor) (Tabla)</div>
+      <div id="statsTableTitle" class="chart-title" style="display:none">Distribución de precios (top 10 ítems por precio) (Tabla)</div>
       <div id="statsTableWrap" class="table-wrap" style="display:none;margin-bottom:16px">
         <table id="statsTable">
           <thead>
@@ -554,14 +554,12 @@ function generateCharts(){
     statsTableTitle.style.display='none';
 
   const volMap=new Map();
-  const valMap=new Map();
   const priceMap=new Map();
   const sysCount=new Map();
   const scatterPV=[];
   const days=[];
   for(const r of rows){
     volMap.set(r.type_name,(volMap.get(r.type_name)||0)+r.volume_remain);
-    valMap.set(r.type_name,(valMap.get(r.type_name)||0)+r.volume_remain*r.price);
     if(!priceMap.has(r.type_name)) priceMap.set(r.type_name,[]);
     priceMap.get(r.type_name).push(r.price);
     sysCount.set(r.system_id,(sysCount.get(r.system_id)||0)+1);
@@ -625,17 +623,23 @@ function generateCharts(){
       showChartNote('chartVolBottom','No hay datos para esta gráfica.');
     }
 
-    const topVal=[...valMap.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10);
-    const bottomVal=[...valMap.entries()].filter(([,v])=>v>0).sort((a,b)=>a[1]-b[1]).slice(0,10);
-    if(topVal.length){
+    const avgPriceArr=[...priceMap.entries()].map(([name,prices])=>{
+      const valid=prices.filter(Number.isFinite);
+      if(!valid.length) return null;
+      const avg=valid.reduce((a,b)=>a+b,0)/valid.length;
+      return [name,avg];
+    }).filter(Boolean);
+    const topPrice=[...avgPriceArr].sort((a,b)=>b[1]-a[1]).slice(0,10);
+    const bottomPrice=avgPriceArr.filter(([,v])=>v>0).sort((a,b)=>a[1]-b[1]).slice(0,10);
+    if(topPrice.length){
       try{
         charts.val=new Chart(j('#chartVal'),{
           type:'bar',
           data:{
-            labels:topVal.map(x=>x[0]),
+            labels:topPrice.map(x=>x[0]),
             datasets:[{
-              data:topVal.map(x=>x[1]),
-              backgroundColor:palette.slice(0,topVal.length),
+              data:topPrice.map(x=>x[1]),
+              backgroundColor:palette.slice(0,topPrice.length),
               barPercentage:0.375,
               categoryPercentage:0.8
             }]
@@ -645,7 +649,7 @@ function generateCharts(){
             aspectRatio:3.5556,
             plugins:{
               legend:{display:false},
-              title:{display:true,text:'Top 10 ítems por valor (Gráfico de barras)'}
+              title:{display:true,text:'Top 10 ítems por precio (Gráfico de barras)'}
             }
           }
         });
@@ -654,15 +658,15 @@ function generateCharts(){
       showChartNote('chartVal','No hay datos para esta gráfica.');
     }
 
-    if(bottomVal.length){
+    if(bottomPrice.length){
       try{
         charts.valBottom=new Chart(j('#chartValBottom'),{
           type:'bar',
           data:{
-            labels:bottomVal.map(x=>x[0]),
+            labels:bottomPrice.map(x=>x[0]),
             datasets:[{
-              data:bottomVal.map(x=>x[1]),
-              backgroundColor:palette.slice(0,bottomVal.length),
+              data:bottomPrice.map(x=>x[1]),
+              backgroundColor:palette.slice(0,bottomPrice.length),
               barPercentage:0.375,
               categoryPercentage:0.8
             }]
@@ -672,7 +676,7 @@ function generateCharts(){
             aspectRatio:3.5556,
             plugins:{
               legend:{display:false},
-              title:{display:true,text:'Bottom 10 ítems por valor (Gráfico de barras)'}
+              title:{display:true,text:'Bottom 10 ítems por precio (Gráfico de barras)'}
             }
           }
         });
@@ -681,8 +685,8 @@ function generateCharts(){
       showChartNote('chartValBottom','No hay datos para esta gráfica.');
     }
 
-    if(topVal.length){
-      const stats = topVal.map(([name])=>{
+    if(topPrice.length){
+      const stats = topPrice.map(([name])=>{
         const prices = (priceMap.get(name)||[]).filter(Number.isFinite);
         return {name,prices};
       }).filter(x=>x.prices.length>0)
@@ -699,7 +703,7 @@ function generateCharts(){
             j('#chartDist'),
             stats.map(x=>x.name),
             stats.map(x=>x.s),
-            'Distribución de precios (top 10 ítems por valor) (Gráfico de cajas)'
+            'Distribución de precios (top 10 ítems por precio) (Gráfico de cajas)'
           );
         }catch(e){ console.error(e); showChartNote('chartDist','No se pudo generar la gráfica con los datos actuales.'); }
       } else {
