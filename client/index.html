@@ -125,8 +125,6 @@
         </table>
       </div>
       <p id="statsTableNote" class="note" style="display:none;margin-bottom:16px"></p>
-      <canvas id="chartStats"></canvas>
-      <p id="chartStatsNote" class="note" style="display:none"></p>
       <canvas id="chartDist"></canvas>
       <p id="chartDistNote" class="note" style="display:none"></p>
       <canvas id="chartHeat"></canvas>
@@ -365,7 +363,7 @@ let ordersRaw=[];
 let nameCache=new Map();
 let currentSort={k:"type_name",dir:1};
 let charts={};
-const chartIds=['chartVol','chartVolBottom','chartVal','chartValBottom','chartStats','chartDist','chartHeat','chartScatter','chartAge'];
+const chartIds=['chartVol','chartVolBottom','chartVal','chartValBottom','chartDist','chartHeat','chartScatter','chartAge'];
 
 function showChartNote(id,msg){
   const canvas=j('#'+id);
@@ -649,19 +647,9 @@ function generateCharts(){
       statsTableBody.innerHTML=statsRows;
       statsTableWrap.style.display='block';
       statsTableTitle.style.display='block';
-      try{
-        const boxData=stats.map(x=>x.s);
-        charts.stats=renderBoxChart(
-          j('#chartStats'),
-          stats.map(x=>x.name),
-          boxData,
-          'Distribución de precios (top 10 ítems por valor) (Gráfico de cajas)'
-        );
-      }catch(e){ console.error(e); showChartNote('chartStats','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
       statsTableNote.textContent='No hay datos para la tabla.';
       statsTableNote.style.display='block';
-      showChartNote('chartStats','No hay datos para esta gráfica.');
     }
 
     const distItems=[...priceMap.entries()].sort((a,b)=>b[1].length-a[1].length).slice(0,10);
