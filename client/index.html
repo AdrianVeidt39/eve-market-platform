@@ -43,19 +43,8 @@
   .kpi .num{font-size:20px;font-weight:700;color:var(--accent2)}
   .chart-title{text-align:center;font-weight:700;margin:18px 0 10px}
 </style>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-box-and-violin-plot@4/dist/chartjs-chart-box-and-violin-plot.min.js"></script>
-<script>
-  if (window.ChartjsChartBoxAndViolinPlot) {
-    const {
-      BoxPlotController,
-      BoxAndWhiskers,
-      ViolinController,
-      Violin,
-    } = ChartjsChartBoxAndViolinPlot;
-    Chart.register(BoxPlotController, BoxAndWhiskers, ViolinController, Violin);
-  }
-</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-box-and-violin-plot@4.3.3/build/index.umd.min.js"></script>
 </head>
 <body>
   <div class="wrap">
@@ -223,6 +212,9 @@ const fmtBig = n=>{
 };
 const sleep = ms=>new Promise(r=>setTimeout(r,ms));
 const palette = ['#30a3ff','#00d1b2','#ff6b6b','#ffc107','#9b59b6','#e67e22','#2ecc71','#f39c12','#8e44ad','#1abc9c'];
+const styles = getComputedStyle(document.documentElement);
+const accentColor = styles.getPropertyValue('--accent') || '#30a3ff';
+const accent2Color = styles.getPropertyValue('--accent2') || '#00d1b2';
 
 const quantile = (arr, q) => {
   const sorted = arr.slice().sort((a,b)=>a-b);
@@ -235,6 +227,7 @@ const quantile = (arr, q) => {
 };
 
 const boxStats = arr => {
+  if(!Array.isArray(arr) || arr.length===0) return null;
   const sorted = arr.slice().sort((a,b)=>a-b);
   return {
     min: sorted[0],
@@ -253,13 +246,14 @@ const flatLinePlugin = colors => ({
     meta.data.forEach((bar,i)=>{
       const v = chart.data.datasets[0].data[i];
       const yPos = y.getPixelForValue(v);
-      const half = bar.width / 2;
+      const {width,x} = bar.getProps(['width','x'], true);
+      const half = width / 2;
       ctx.save();
       ctx.strokeStyle = colors[i] || '#fff';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(bar.x - half, yPos);
-      ctx.lineTo(bar.x + half, yPos);
+      ctx.moveTo(x - half, yPos);
+      ctx.lineTo(x + half, yPos);
       ctx.stroke();
       ctx.restore();
     });
@@ -639,22 +633,31 @@ function generateCharts(){
     }
 
     if(topVal.length){
-      const stats=topVal.map(([name])=>{
-        const s=boxStats(priceMap.get(name)||[]);
-        return {name,s};
-      });
-      const statsRows=stats.map(({name,s})=>`<tr><td>${escapeHtml(name)}</td><td>${fmtPrice(s.min)}</td><td>${fmtPrice(s.q1)}</td><td>${fmtPrice(s.median)}</td><td>${fmtPrice(s.q3)}</td><td>${fmtPrice(s.max)}</td></tr>`).join('');
-      statsTableBody.innerHTML=statsRows;
-      statsTableWrap.style.display='block';
-      statsTableTitle.style.display='block';
-      try{
-        charts.dist=renderBoxChart(
-          j('#chartDist'),
-          stats.map(x=>x.name),
-          stats.map(x=>x.s),
-          'Distribución de precios (top 10 ítems por valor) (Gráfico de cajas)'
-        );
-      }catch(e){ console.error(e); showChartNote('chartDist','No se pudo generar la gráfica con los datos actuales.'); }
+      const stats = topVal.map(([name])=>{
+        const prices = (priceMap.get(name)||[]).filter(Number.isFinite);
+        return {name,prices};
+      }).filter(x=>x.prices.length>0)
+        .map(({name,prices})=>({name,s:boxStats(prices)}))
+        .filter(x=>x.s);
+
+      if(stats.length){
+        const statsRows=stats.map(({name,s})=>`<tr><td>${escapeHtml(name)}</td><td>${fmtPrice(s.min)}</td><td>${fmtPrice(s.q1)}</td><td>${fmtPrice(s.median)}</td><td>${fmtPrice(s.q3)}</td><td>${fmtPrice(s.max)}</td></tr>`).join('');
+        statsTableBody.innerHTML=statsRows;
+        statsTableWrap.style.display='block';
+        statsTableTitle.style.display='block';
+        try{
+          charts.dist=renderBoxChart(
+            j('#chartDist'),
+            stats.map(x=>x.name),
+            stats.map(x=>x.s),
+            'Distribución de precios (top 10 ítems por valor) (Gráfico de cajas)'
+          );
+        }catch(e){ console.error(e); showChartNote('chartDist','No se pudo generar la gráfica con los datos actuales.'); }
+      } else {
+        statsTableNote.textContent='No hay datos para la tabla.';
+        statsTableNote.style.display='block';
+        showChartNote('chartDist','No hay datos suficientes para esta gráfica.');
+      }
     } else {
       statsTableNote.textContent='No hay datos para la tabla.';
       statsTableNote.style.display='block';
@@ -669,7 +672,7 @@ function generateCharts(){
     if(sysData.length){ const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys); sysData.forEach(d=>{d.x=(d.x-minX)/(maxX-minX); d.y=(d.y-minY)/(maxY-minY);}); }
     if(sysData.length){
       try{
-        charts.heat=new Chart(j('#chartHeat'),{type:'bubble',data:{datasets:[{data:sysData,backgroundColor:'rgba(48,163,255,0.5)',borderColor:'var(--accent)'}]},options:{scales:{x:{display:false},y:{display:false}},plugins:{legend:{display:false},title:{display:true,text:'Órdenes por sistema (Gráfico de burbujas)'},tooltip:{callbacks:{label:ctx=>`${ctx.raw.label}: ${ctx.raw.count} órdenes`}}}}});
+        charts.heat=new Chart(j('#chartHeat'),{type:'bubble',data:{datasets:[{data:sysData,backgroundColor:'rgba(48,163,255,0.5)',borderColor:accentColor}]} ,options:{scales:{x:{display:false},y:{display:false}},plugins:{legend:{display:false},title:{display:true,text:'Órdenes por sistema (Gráfico de burbujas)'},tooltip:{callbacks:{label:ctx=>`${ctx.raw.label}: ${ctx.raw.count} órdenes`}}}}});
       }catch(e){ console.error(e); showChartNote('chartHeat','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
       showChartNote('chartHeat','No hay datos suficientes para esta gráfica.');
@@ -677,7 +680,7 @@ function generateCharts(){
 
     if(scatterPV.length){
       try{
-        charts.scatter=new Chart(j('#chartScatter'),{type:'scatter',data:{datasets:[{data:scatterPV,backgroundColor:'rgba(0,209,178,0.5)',borderColor:'var(--accent2)'}]},options:{plugins:{legend:{display:false},title:{display:true,text:'Precio vs unidades (Gráfico de dispersión)'}},scales:{x:{title:{display:true,text:'Unidades'}},y:{title:{display:true,text:'Precio'}}}}});
+        charts.scatter=new Chart(j('#chartScatter'),{type:'scatter',data:{datasets:[{data:scatterPV,backgroundColor:'rgba(0,209,178,0.5)',borderColor:accent2Color}]} ,options:{plugins:{legend:{display:false},title:{display:true,text:'Precio vs unidades (Gráfico de dispersión)'}},scales:{x:{title:{display:true,text:'Unidades'}},y:{title:{display:true,text:'Precio'}}}}});
       }catch(e){ console.error(e); showChartNote('chartScatter','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
       showChartNote('chartScatter','No hay datos para esta gráfica.');
