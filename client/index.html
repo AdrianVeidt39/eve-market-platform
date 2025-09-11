@@ -323,10 +323,11 @@ function renderBoxChart(el, labels, boxData, title){
   if(gMin === gMax){
     const v = gMin;
     const delta = v === 0 ? 1 : Math.abs(v) * 0.05;
+    fitBarHeight(el, labels.length);
     return new Chart(el,{
       type:'bar',
       data:{labels,datasets:[{data:labels.map(()=>v),backgroundColor:'transparent',borderColor:'transparent'}]},
-      options:{plugins:{legend:{display:false},title:{display:true,text:title}},scales:{y:{min:v-delta,max:v+delta}}},
+      options:{maintainAspectRatio:false,plugins:{legend:{display:false},title:{display:true,text:title}},scales:{y:{min:v-delta,max:v+delta}}},
       plugins:[flatLinePlugin(colors)]
     });
   }
@@ -339,6 +340,12 @@ function renderBoxChart(el, labels, boxData, title){
 }
 
 Chart.defaults.color = '#fff';
+
+function fitBarHeight(canvas, count){
+  const minHeight=160;
+  const h=Math.max(minHeight, count*32);
+  canvas.style.height=h+'px';
+}
 
 const LOG_ESI = true; // Desactiva en producción
 
@@ -581,7 +588,9 @@ function generateCharts(){
     const bottomVol=[...volMap.entries()].filter(([,v])=>v>0).sort((a,b)=>a[1]-b[1]).slice(0,10);
     if(topVol.length){
       try{
-        charts.vol=new Chart(j('#chartVol'),{
+        const el=j('#chartVol');
+        fitBarHeight(el, topVol.length);
+        charts.vol=new Chart(el,{
           type:'bar',
           data:{
             labels:topVol.map(x=>x[0]),
@@ -594,7 +603,7 @@ function generateCharts(){
           },
           options:{
             indexAxis:'y',
-            aspectRatio:3.5556,
+            maintainAspectRatio:false,
             plugins:{
               legend:{display:false},
               title:{display:true,text:'Top 10 ítems por unidades (Gráfico de barras)'}
@@ -608,7 +617,9 @@ function generateCharts(){
 
     if(bottomVol.length){
       try{
-        charts.volBottom=new Chart(j('#chartVolBottom'),{
+        const el=j('#chartVolBottom');
+        fitBarHeight(el, bottomVol.length);
+        charts.volBottom=new Chart(el,{
           type:'bar',
           data:{
             labels:bottomVol.map(x=>x[0]),
@@ -621,7 +632,7 @@ function generateCharts(){
           },
           options:{
             indexAxis:'y',
-            aspectRatio:3.5556,
+            maintainAspectRatio:false,
             plugins:{
               legend:{display:false},
               title:{display:true,text:'Bottom 10 ítems por unidades (Gráfico de barras)'}
@@ -643,7 +654,9 @@ function generateCharts(){
     const bottomPrice=avgPriceArr.filter(([,v])=>v>0).sort((a,b)=>a[1]-b[1]).slice(0,10);
     if(topPrice.length){
       try{
-        charts.val=new Chart(j('#chartVal'),{
+        const el=j('#chartVal');
+        fitBarHeight(el, topPrice.length);
+        charts.val=new Chart(el,{
           type:'bar',
           data:{
             labels:topPrice.map(x=>x[0]),
@@ -656,7 +669,7 @@ function generateCharts(){
           },
           options:{
             indexAxis:'y',
-            aspectRatio:3.5556,
+            maintainAspectRatio:false,
             plugins:{
               legend:{display:false},
               title:{display:true,text:'Top 10 ítems por precio (Gráfico de barras)'}
@@ -670,7 +683,9 @@ function generateCharts(){
 
     if(bottomPrice.length){
       try{
-        charts.valBottom=new Chart(j('#chartValBottom'),{
+        const el=j('#chartValBottom');
+        fitBarHeight(el, bottomPrice.length);
+        charts.valBottom=new Chart(el,{
           type:'bar',
           data:{
             labels:bottomPrice.map(x=>x[0]),
@@ -683,7 +698,7 @@ function generateCharts(){
           },
           options:{
             indexAxis:'y',
-            aspectRatio:3.5556,
+            maintainAspectRatio:false,
             plugins:{
               legend:{display:false},
               title:{display:true,text:'Bottom 10 ítems por precio (Gráfico de barras)'}
@@ -699,7 +714,9 @@ function generateCharts(){
     const bottomOrders=[...orderCount.entries()].filter(([,v])=>v>0).sort((a,b)=>a[1]-b[1]).slice(0,10);
     if(topOrders.length){
       try{
-        charts.orders=new Chart(j('#chartOrders'),{
+        const el=j('#chartOrders');
+        fitBarHeight(el, topOrders.length);
+        charts.orders=new Chart(el,{
           type:'bar',
           data:{
             labels:topOrders.map(x=>x[0]),
@@ -712,7 +729,7 @@ function generateCharts(){
           },
           options:{
             indexAxis:'y',
-            aspectRatio:3.5556,
+            maintainAspectRatio:false,
             plugins:{
               legend:{display:false},
               title:{display:true,text:'Top 10 ítems por órdenes (Gráfico de barras)'}
@@ -726,7 +743,9 @@ function generateCharts(){
 
     if(bottomOrders.length){
       try{
-        charts.ordersBottom=new Chart(j('#chartOrdersBottom'),{
+        const el=j('#chartOrdersBottom');
+        fitBarHeight(el, bottomOrders.length);
+        charts.ordersBottom=new Chart(el,{
           type:'bar',
           data:{
             labels:bottomOrders.map(x=>x[0]),
@@ -739,7 +758,7 @@ function generateCharts(){
           },
           options:{
             indexAxis:'y',
-            aspectRatio:3.5556,
+            maintainAspectRatio:false,
             plugins:{
               legend:{display:false},
               title:{display:true,text:'Bottom 10 ítems por órdenes (Gráfico de barras)'}
