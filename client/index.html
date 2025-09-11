@@ -790,7 +790,7 @@ function generateCharts(){
             stats.map(x=>x.s),
             'Distribución de precios (top 10 ítems por órdenes) (Gráfico de cajas)'
           );
-        }catch(e){ console.error(e); showChartNote('chartDist','No se pudo generar la gráfica con los datos actuales.'); }
+        }catch(e){ console.error(e); showChartNote('chartDist','No se pudo generar la gráfica con los datos actuales: ' + (e && e.message ? e.message : e)); }
       } else {
         statsTableNote.textContent='No hay datos para la tabla.';
         statsTableNote.style.display='block';
