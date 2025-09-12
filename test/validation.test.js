@@ -76,7 +76,17 @@ function renderBoxChart(el, labels, boxData, title){
   const dataAsArrays=boxData.map(d=>[d.min,d.q1,d.median,d.q3,d.max]);
   return new Chart(el,{
     type:'boxplot',
-    data:{labels,datasets:[{data:dataAsArrays,backgroundColor:colors}]},
+    data:{
+      labels,
+      datasets:[{
+        data:dataAsArrays,
+        backgroundColor:colors,
+        borderColor:'#fff',
+        borderWidth:1,
+        medianColor:'#fff',
+        quartileColor:'#fff'
+      }]
+    },
     options:{plugins:{legend:{display:false},title:{display:true,text:title}}}
   });
 }

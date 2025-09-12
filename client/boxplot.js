@@ -39,14 +39,14 @@
 
       // median line
       ctx.beginPath();
-      ctx.strokeStyle = 'red';
+      ctx.strokeStyle = v.options.medianColor || v.options.borderColor;
       ctx.moveTo(x0, b.median);
       ctx.lineTo(x0 + width, b.median);
       ctx.stroke();
 
       // quartile lines
       ctx.beginPath();
-      ctx.strokeStyle = 'yellow';
+      ctx.strokeStyle = v.options.quartileColor || v.options.borderColor;
       ctx.moveTo(x0, b.q1);
       ctx.lineTo(x0 + width, b.q1);
       ctx.moveTo(x0, b.q3);
@@ -57,7 +57,12 @@
     }
   }
   BoxAndWhiskers.id = 'boxandwhiskers';
-  BoxAndWhiskers.defaults = Object.assign({}, BarElement.defaults);
+  BoxAndWhiskers.defaults = Object.assign({}, BarElement.defaults, {
+    borderWidth: 1,
+    borderColor: '#fff',
+    medianColor: '#fff',
+    quartileColor: '#fff'
+  });
 
   class BoxPlotController extends BarController {
     static id = 'boxplot';

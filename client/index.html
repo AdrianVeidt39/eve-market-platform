@@ -347,7 +347,17 @@ function renderBoxChart(el, labels, boxData, title){
   fitBarHeight(el, labels.length);
   return new Chart(el,{
     type:'boxplot',
-    data:{labels,datasets:[{data:dataAsArrays,backgroundColor:colors}]},
+    data:{
+      labels,
+      datasets:[{
+        data:dataAsArrays,
+        backgroundColor:colors,
+        borderColor:'#fff',
+        borderWidth:1,
+        medianColor:'#fff',
+        quartileColor:'#fff'
+      }]
+    },
     options:{
       plugins:{legend:{display:false},title:{display:true,text:title}},
       scales:{y:{min:gMin,max:gMax}}
