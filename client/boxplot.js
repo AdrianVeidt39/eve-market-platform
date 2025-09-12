@@ -15,7 +15,7 @@
       }
       const x = v.x;
       const width = v.width;
-      const x0 = x - width/2;
+      const x0 = x - width / 2;
       ctx.save();
       ctx.fillStyle = v.options.backgroundColor;
       ctx.strokeStyle = v.options.borderColor;
@@ -23,11 +23,10 @@
       // box
       ctx.fillRect(x0, b.q1, width, b.q3 - b.q1);
       ctx.strokeRect(x0, b.q1, width, b.q3 - b.q1);
-      // median
-      ctx.beginPath();
-      ctx.moveTo(x0, b.median);
-      ctx.lineTo(x0 + width, b.median);
+
       // whiskers
+      ctx.beginPath();
+      ctx.strokeStyle = v.options.borderColor;
       ctx.moveTo(x, b.min);
       ctx.lineTo(x, b.q1);
       ctx.moveTo(x0, b.min);
@@ -37,6 +36,23 @@
       ctx.moveTo(x0, b.max);
       ctx.lineTo(x0 + width, b.max);
       ctx.stroke();
+
+      // median line
+      ctx.beginPath();
+      ctx.strokeStyle = 'red';
+      ctx.moveTo(x0, b.median);
+      ctx.lineTo(x0 + width, b.median);
+      ctx.stroke();
+
+      // quartile lines
+      ctx.beginPath();
+      ctx.strokeStyle = 'yellow';
+      ctx.moveTo(x0, b.q1);
+      ctx.lineTo(x0 + width, b.q1);
+      ctx.moveTo(x0, b.q3);
+      ctx.lineTo(x0 + width, b.q3);
+      ctx.stroke();
+
       ctx.restore();
     }
   }
