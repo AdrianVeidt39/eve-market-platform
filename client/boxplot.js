@@ -17,7 +17,7 @@
       ctx.save();
       ctx.fillStyle = v.options.backgroundColor;
       ctx.strokeStyle = v.options.borderColor;
-      const whiskerWidth = Math.min(v.options.borderWidth, 2);
+      const whiskerWidth = v.options.borderWidth;
       ctx.lineWidth = whiskerWidth;
 
       const y = v.y;
@@ -83,23 +83,32 @@
     static defaults = Object.assign({}, BarController.defaults);
     static overrides = Object.assign({}, BarController.overrides);
 
-    parsePrimitiveData(meta, data, start, count){
+    parse(start, count){
+      const meta = this._cachedMeta;
+      const data = this.getDataset().data;
       const parsed = meta._parsed;
-      for(let i=0;i<count;i++){
-        parsed[start+i] = data[start+i];
+      for(let i=start; i<start+count; i++){
+        const d = data[i];
+        parsed[i] = Array.isArray(d) ? d[2] : d.median;
       }
     }
 
     updateElement(elem, index, properties, mode){
       super.updateElement(elem, index, properties, mode);
-      const v = this.getParsed(index);
+      elem.skip = false;
+
+      const raw = this.getDataset().data[index];
+      const [min,q1,median,q3,max] = Array.isArray(raw)
+        ? raw
+        : [raw.min, raw.q1, raw.median, raw.q3, raw.max];
+
       const scale = this._cachedMeta.vScale;
       elem.box = {
-        min: scale.getPixelForValue(v[0]),
-        q1: scale.getPixelForValue(v[1]),
-        median: scale.getPixelForValue(v[2]),
-        q3: scale.getPixelForValue(v[3]),
-        max: scale.getPixelForValue(v[4])
+        min: scale.getPixelForValue(min),
+        q1: scale.getPixelForValue(q1),
+        median: scale.getPixelForValue(median),
+        q3: scale.getPixelForValue(q3),
+        max: scale.getPixelForValue(max)
       };
     }
   }

@@ -81,7 +81,6 @@ function renderBoxChart(el, labels, boxData, title){
       labels,
       datasets:[{
         data:dataAsArrays,
-        parsing:false,
         backgroundColor:'transparent',
         borderColor:colors,
         borderWidth:1,
