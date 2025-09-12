@@ -19,18 +19,26 @@
       ctx.strokeStyle = v.options.borderColor;
       const whiskerWidth = v.options.borderWidth;
       ctx.lineWidth = whiskerWidth;
-
+      const align = p => Math.round(p) + 0.5;
       const y = v.y;
       const height = v.height;
       const half = Math.min(height / 4, 4);
+      const y0 = align(y);
+      const ymin = align(y - half);
+      const ymax = align(y + half);
+      const xmin = align(b.min);
+      const xq1 = align(b.q1);
+      const xmed = align(b.median);
+      const xq3 = align(b.q3);
+      const xmax = align(b.max);
 
-      if(b.min === b.max && b.min === b.q1 && b.min === b.median && b.min === b.q3){
-        const x = b.min;
+      if(xmin === xmax && xmin === xq1 && xmin === xmed && xmin === xq3){
+        const x = xmin;
         ctx.beginPath();
-        ctx.moveTo(x - half, y - half);
-        ctx.lineTo(x + half, y + half);
-        ctx.moveTo(x - half, y + half);
-        ctx.lineTo(x + half, y - half);
+        ctx.moveTo(align(x - half), ymin);
+        ctx.lineTo(align(x + half), ymax);
+        ctx.moveTo(align(x - half), ymax);
+        ctx.lineTo(align(x + half), ymin);
         ctx.stroke();
         ctx.restore();
         return;
@@ -38,33 +46,33 @@
 
       // whisker line
       ctx.beginPath();
-      ctx.moveTo(b.min, y);
-      ctx.lineTo(b.max, y);
+      ctx.moveTo(xmin, y0);
+      ctx.lineTo(xmax, y0);
       ctx.stroke();
 
       // min/max caps
       ctx.beginPath();
-      ctx.moveTo(b.min, y - half);
-      ctx.lineTo(b.min, y + half);
-      ctx.moveTo(b.max, y - half);
-      ctx.lineTo(b.max, y + half);
+      ctx.moveTo(xmin, ymin);
+      ctx.lineTo(xmin, ymax);
+      ctx.moveTo(xmax, ymin);
+      ctx.lineTo(xmax, ymax);
       ctx.stroke();
 
       // q1-q3 box (outline only)
       const boxHeight = Math.max(2, half * 2);
-      const top = y - boxHeight / 2;
+      const top = align(y0 - boxHeight / 2);
       ctx.beginPath();
       ctx.strokeStyle = v.options.borderColor;
       ctx.lineWidth = v.options.borderWidth;
-      ctx.rect(b.q1, top, b.q3 - b.q1, boxHeight);
+      ctx.rect(xq1, top, xq3 - xq1, boxHeight);
       ctx.stroke();
 
       // median line
       ctx.beginPath();
       ctx.strokeStyle = v.options.medianColor || v.options.borderColor;
       ctx.lineWidth = v.options.borderWidth;
-      ctx.moveTo(b.median, top);
-      ctx.lineTo(b.median, top + boxHeight);
+      ctx.moveTo(xmed, top);
+      ctx.lineTo(xmed, top + boxHeight);
       ctx.stroke();
 
       ctx.restore();
