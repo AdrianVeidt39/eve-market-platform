@@ -358,7 +358,7 @@ function renderBoxChart(el, labels, boxData, title){
   if(gMin === gMax){
     const v = gMin;
     const delta = v === 0 ? 1 : Math.abs(v) * 0.05;
-    fitBarHeight(el, labels.length, 0.5);
+    fitBarHeight(el, labels.length, 0.25);
     return new Chart(el,{
       type:'bar',
       data:{labels,datasets:[{data:labels.map(()=>v),backgroundColor:'transparent',borderColor:'transparent'}]},
@@ -367,7 +367,7 @@ function renderBoxChart(el, labels, boxData, title){
     });
   }
   const dataAsArrays = boxData.map(d=>[d.min,d.q1,d.median,d.q3,d.max]);
-  fitBarHeight(el, labels.length, 0.5);
+  fitBarHeight(el, labels.length, 0.25);
   return new Chart(el,{
     type:'boxplot',
     data:{
