@@ -4,9 +4,9 @@
     console.error('Chart.js not found');
     return;
   }
-  const {BarController, elements:{Rectangle}} = Chart;
+  const {BarController, elements:{BarElement}} = Chart;
 
-  class BoxAndWhiskers extends Rectangle {
+  class BoxAndWhiskers extends BarElement {
     draw(ctx){
       const v = this;
       const b = v.box;
@@ -41,7 +41,7 @@
     }
   }
   BoxAndWhiskers.id = 'boxandwhiskers';
-  BoxAndWhiskers.defaults = Object.assign({}, Rectangle.defaults);
+  BoxAndWhiskers.defaults = Object.assign({}, BarElement.defaults);
 
   class BoxPlotController extends BarController {
     static id = 'boxplot';
