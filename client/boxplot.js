@@ -14,45 +14,82 @@
       if(!b){
         return;
       }
-      const x = v.x;
-      const width = v.width;
-      const x0 = x - width / 2;
+      const horizontal = v.horizontal;
       ctx.save();
       ctx.fillStyle = v.options.backgroundColor;
       ctx.strokeStyle = v.options.borderColor;
       ctx.lineWidth = v.options.borderWidth;
-      // box
-      ctx.fillRect(x0, b.q1, width, b.q3 - b.q1);
-      ctx.strokeRect(x0, b.q1, width, b.q3 - b.q1);
+      if(horizontal){
+        const y = v.y;
+        const height = v.height;
+        const y0 = y - height / 2;
+        // box
+        ctx.fillRect(b.q1, y0, b.q3 - b.q1, height);
+        ctx.strokeRect(b.q1, y0, b.q3 - b.q1, height);
 
-      // whiskers
-      ctx.beginPath();
-      ctx.strokeStyle = v.options.borderColor;
-      ctx.moveTo(x, b.min);
-      ctx.lineTo(x, b.q1);
-      ctx.moveTo(x0, b.min);
-      ctx.lineTo(x0 + width, b.min);
-      ctx.moveTo(x, b.max);
-      ctx.lineTo(x, b.q3);
-      ctx.moveTo(x0, b.max);
-      ctx.lineTo(x0 + width, b.max);
-      ctx.stroke();
+        // whiskers
+        ctx.beginPath();
+        ctx.moveTo(b.min, y);
+        ctx.lineTo(b.q1, y);
+        ctx.moveTo(b.min, y0);
+        ctx.lineTo(b.min, y0 + height);
+        ctx.moveTo(b.max, y);
+        ctx.lineTo(b.q3, y);
+        ctx.moveTo(b.max, y0);
+        ctx.lineTo(b.max, y0 + height);
+        ctx.stroke();
 
-      // median line
-      ctx.beginPath();
-      ctx.strokeStyle = v.options.medianColor || v.options.borderColor;
-      ctx.moveTo(x0, b.median);
-      ctx.lineTo(x0 + width, b.median);
-      ctx.stroke();
+        // median line
+        ctx.beginPath();
+        ctx.strokeStyle = v.options.medianColor || v.options.borderColor;
+        ctx.moveTo(b.median, y0);
+        ctx.lineTo(b.median, y0 + height);
+        ctx.stroke();
 
-      // quartile lines
-      ctx.beginPath();
-      ctx.strokeStyle = v.options.quartileColor || v.options.borderColor;
-      ctx.moveTo(x0, b.q1);
-      ctx.lineTo(x0 + width, b.q1);
-      ctx.moveTo(x0, b.q3);
-      ctx.lineTo(x0 + width, b.q3);
-      ctx.stroke();
+        // quartile lines
+        ctx.beginPath();
+        ctx.strokeStyle = v.options.quartileColor || v.options.borderColor;
+        ctx.moveTo(b.q1, y0);
+        ctx.lineTo(b.q1, y0 + height);
+        ctx.moveTo(b.q3, y0);
+        ctx.lineTo(b.q3, y0 + height);
+        ctx.stroke();
+      } else {
+        const x = v.x;
+        const width = v.width;
+        const x0 = x - width / 2;
+        // box
+        ctx.fillRect(x0, b.q1, width, b.q3 - b.q1);
+        ctx.strokeRect(x0, b.q1, width, b.q3 - b.q1);
+
+        // whiskers
+        ctx.beginPath();
+        ctx.moveTo(x, b.min);
+        ctx.lineTo(x, b.q1);
+        ctx.moveTo(x0, b.min);
+        ctx.lineTo(x0 + width, b.min);
+        ctx.moveTo(x, b.max);
+        ctx.lineTo(x, b.q3);
+        ctx.moveTo(x0, b.max);
+        ctx.lineTo(x0 + width, b.max);
+        ctx.stroke();
+
+        // median line
+        ctx.beginPath();
+        ctx.strokeStyle = v.options.medianColor || v.options.borderColor;
+        ctx.moveTo(x0, b.median);
+        ctx.lineTo(x0 + width, b.median);
+        ctx.stroke();
+
+        // quartile lines
+        ctx.beginPath();
+        ctx.strokeStyle = v.options.quartileColor || v.options.borderColor;
+        ctx.moveTo(x0, b.q1);
+        ctx.lineTo(x0 + width, b.q1);
+        ctx.moveTo(x0, b.q3);
+        ctx.lineTo(x0 + width, b.q3);
+        ctx.stroke();
+      }
 
       ctx.restore();
     }

@@ -382,8 +382,9 @@ function renderBoxChart(el, labels, boxData, title){
       }]
     },
     options:{
+      indexAxis:'y',
       plugins:{legend:{display:false},title:{display:true,text:title}},
-      scales:{y:{min:gMin,max:gMax}}
+      scales:{x:{min:gMin,max:gMax}}
     }
   });
 }

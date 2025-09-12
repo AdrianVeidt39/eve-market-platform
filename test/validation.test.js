@@ -88,7 +88,7 @@ function renderBoxChart(el, labels, boxData, title){
         quartileColor:'#fff'
       }]
     },
-    options:{plugins:{legend:{display:false},title:{display:true,text:title}}}
+    options:{indexAxis:'y',plugins:{legend:{display:false},title:{display:true,text:title}},scales:{x:{min:gMin,max:gMax}}}
   });
 }
 
