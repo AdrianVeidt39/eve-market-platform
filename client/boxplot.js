@@ -23,6 +23,18 @@
       const height = v.height;
       const half = Math.min(height / 4, 4);
 
+      if(b.min === b.max && b.min === b.q1 && b.min === b.median && b.min === b.q3){
+        const x = b.min;
+        ctx.beginPath();
+        ctx.moveTo(x - half, y - half);
+        ctx.lineTo(x + half, y + half);
+        ctx.moveTo(x - half, y + half);
+        ctx.lineTo(x + half, y - half);
+        ctx.stroke();
+        ctx.restore();
+        return;
+      }
+
       // whisker line
       ctx.beginPath();
       ctx.moveTo(b.min, y);

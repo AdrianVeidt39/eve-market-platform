@@ -80,6 +80,18 @@ const BoxAndWiskers = Chart.elements.BoxAndWhiskers = ArrayElementBase.extend({
     const height = vm.height;
     const y0 = y - height / 2;
 
+    if (boxplot.min === boxplot.max && boxplot.min === boxplot.q1 && boxplot.min === boxplot.median && boxplot.min === boxplot.q3) {
+      const x = boxplot.min;
+      const size = height / 2;
+      ctx.beginPath();
+      ctx.moveTo(x - size, y0);
+      ctx.lineTo(x + size, y0 + height);
+      ctx.moveTo(x - size, y0 + height);
+      ctx.lineTo(x + size, y0);
+      ctx.stroke();
+      return;
+    }
+
     // Draw the border around the main q1>q3 box
     if (boxplot.q3 > boxplot.q1) {
       ctx.strokeRect(boxplot.q1, y0, boxplot.q3 - boxplot.q1, height);
