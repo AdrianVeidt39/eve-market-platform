@@ -60,7 +60,6 @@ const BoxAndWiskers = Chart.elements.BoxAndWhiskers = ArrayElementBase.extend({
     const vm = this._view;
 
     const boxplot = vm.boxplot;
-    const vert = this.isVertical();
 
     ctx.save();
 
@@ -68,88 +67,13 @@ const BoxAndWiskers = Chart.elements.BoxAndWhiskers = ArrayElementBase.extend({
     ctx.strokeStyle = vm.borderColor;
     ctx.lineWidth = vm.borderWidth;
 
-    this._drawBoxPlot(vm, boxplot, ctx, vert);
-    this._drawOutliers(vm, boxplot, ctx, vert);
+    this._drawBoxPlotHoriz(vm, boxplot, ctx);
+    this._drawOutliers(vm, boxplot, ctx, false);
 
     ctx.restore();
 
-    this._drawItems(vm, boxplot, ctx, vert);
+    this._drawItems(vm, boxplot, ctx, false);
 
-  },
-  _drawBoxPlot(vm, boxplot, ctx, vert) {
-    if (vert) {
-      this._drawBoxPlotVert(vm, boxplot, ctx);
-    } else {
-      this._drawBoxPlotHoriz(vm, boxplot, ctx);
-    }
-
-  },
-  _drawBoxPlotVert(vm, boxplot, ctx) {
-    const x = vm.x;
-    const width = vm.width;
-    const x0 = x - width / 2;
-
-    // Draw the q1>q3 box
-    if (boxplot.q3 > boxplot.q1) {
-      ctx.fillRect(x0, boxplot.q1, width, boxplot.q3 - boxplot.q1);
-    } else {
-      ctx.fillRect(x0, boxplot.q3, width, boxplot.q1 - boxplot.q3);
-    }
-
-    // Draw the median line
-    ctx.save();
-    if (vm.medianColor) {
-      ctx.strokeStyle = vm.medianColor;
-    }
-    ctx.beginPath();
-    ctx.moveTo(x0, boxplot.median);
-    ctx.lineTo(x0 + width, boxplot.median);
-    ctx.closePath();
-    ctx.stroke();
-
-    // Draw the segment line
-    if (boxplot.segment != null) {
-      if (vm.segmentColor) {
-        ctx.strokeStyle = vm.segmentColor;
-      }
-      ctx.beginPath();
-      ctx.moveTo(x0, boxplot.segment);
-      ctx.lineTo(x0 + width, boxplot.segment);
-      ctx.closePath();
-    }
-    // fill the part below the median with lowerColor
-    if (vm.lowerColor) {
-      ctx.fillStyle = vm.lowerColor;
-      if (boxplot.q3 > boxplot.q1) {
-        ctx.fillRect(x0, boxplot.median, width, boxplot.q3 - boxplot.median);
-      } else {
-        ctx.fillRect(x0, boxplot.median, width, boxplot.q1 - boxplot.median);
-      }
-    }
-
-    ctx.closePath();
-    ctx.stroke();
-    ctx.restore();
-
-    // Draw the border around the main q1>q3 box
-    if (boxplot.q3 > boxplot.q1) {
-      ctx.strokeRect(x0, boxplot.q1, width, boxplot.q3 - boxplot.q1);
-    } else {
-      ctx.strokeRect(x0, boxplot.q3, width, boxplot.q1 - boxplot.q3);
-    }
-
-    // Draw the whiskers
-    ctx.beginPath();
-    ctx.moveTo(x0, boxplot.whiskerMin);
-    ctx.lineTo(x0 + width, boxplot.whiskerMin);
-    ctx.moveTo(x, boxplot.whiskerMin);
-    ctx.lineTo(x, boxplot.q1);
-    ctx.moveTo(x0, boxplot.whiskerMax);
-    ctx.lineTo(x0 + width, boxplot.whiskerMax);
-    ctx.moveTo(x, boxplot.whiskerMax);
-    ctx.lineTo(x, boxplot.q3);
-    ctx.closePath();
-    ctx.stroke();
   },
   _drawBoxPlotHoriz(vm, boxplot, ctx) {
     const y = vm.y;
@@ -198,7 +122,6 @@ const BoxAndWiskers = Chart.elements.BoxAndWhiskers = ArrayElementBase.extend({
   _getBounds() {
     const vm = this._view;
 
-    const vert = this.isVertical();
     const boxplot = vm.boxplot;
 
     if (!boxplot) {
@@ -210,19 +133,6 @@ const BoxAndWiskers = Chart.elements.BoxAndWhiskers = ArrayElementBase.extend({
       };
     }
 
-    if (vert) {
-      const {
-        x,
-        width
-      } = vm;
-      const x0 = x - width / 2;
-      return {
-        left: x0,
-        top: boxplot.whiskerMax,
-        right: x0 + width,
-        bottom: boxplot.whiskerMin
-      };
-    }
     const {
       y,
       height
@@ -237,14 +147,11 @@ const BoxAndWiskers = Chart.elements.BoxAndWhiskers = ArrayElementBase.extend({
   },
   height() {
     const vm = this._view;
-    return vm.base - Math.min(vm.boxplot.q1, vm.boxplot.q3);
+    return vm.height;
   },
   getArea() {
     const vm = this._view;
     const iqr = Math.abs(vm.boxplot.q3 - vm.boxplot.q1);
-    if (this.isVertical()) {
-      return iqr * vm.width;
-    }
     return iqr * vm.height;
   },
   _getOutliers() {

@@ -14,78 +14,44 @@
       if(!b){
         return;
       }
-      const horizontal = v.horizontal;
       ctx.save();
       ctx.fillStyle = v.options.backgroundColor;
       ctx.strokeStyle = v.options.borderColor;
       ctx.lineWidth = v.options.borderWidth;
-      if(horizontal){
-        const y = v.y;
-        const height = v.height;
-        const half = Math.min(height / 4, 4);
-        // whisker line
-        ctx.beginPath();
-        ctx.moveTo(b.min, y);
-        ctx.lineTo(b.max, y);
-        ctx.stroke();
 
-        // min/max caps
-        ctx.beginPath();
-        ctx.moveTo(b.min, y - half);
-        ctx.lineTo(b.min, y + half);
-        ctx.moveTo(b.max, y - half);
-        ctx.lineTo(b.max, y + half);
-        ctx.stroke();
+      const y = v.y;
+      const height = v.height;
+      const half = Math.min(height / 4, 4);
 
-        // q1-q3 bar
-        ctx.beginPath();
-        ctx.strokeStyle = v.options.backgroundColor;
-        ctx.lineWidth = Math.max(2, half * 2);
-        ctx.moveTo(b.q1, y);
-        ctx.lineTo(b.q3, y);
-        ctx.stroke();
+      // whisker line
+      ctx.beginPath();
+      ctx.moveTo(b.min, y);
+      ctx.lineTo(b.max, y);
+      ctx.stroke();
 
-        // median line
-        ctx.beginPath();
-        ctx.strokeStyle = v.options.medianColor || v.options.borderColor;
-        ctx.lineWidth = v.options.borderWidth;
-        ctx.moveTo(b.median, y - half);
-        ctx.lineTo(b.median, y + half);
-        ctx.stroke();
-      } else {
-        const x = v.x;
-        const width = v.width;
-        const half = Math.min(width / 4, 4);
-        // whisker line
-        ctx.beginPath();
-        ctx.moveTo(x, b.min);
-        ctx.lineTo(x, b.max);
-        ctx.stroke();
+      // min/max caps
+      ctx.beginPath();
+      ctx.moveTo(b.min, y - half);
+      ctx.lineTo(b.min, y + half);
+      ctx.moveTo(b.max, y - half);
+      ctx.lineTo(b.max, y + half);
+      ctx.stroke();
 
-        // min/max caps
-        ctx.beginPath();
-        ctx.moveTo(x - half, b.min);
-        ctx.lineTo(x + half, b.min);
-        ctx.moveTo(x - half, b.max);
-        ctx.lineTo(x + half, b.max);
-        ctx.stroke();
+      // q1-q3 bar
+      ctx.beginPath();
+      ctx.strokeStyle = v.options.backgroundColor;
+      ctx.lineWidth = Math.max(2, half * 2);
+      ctx.moveTo(b.q1, y);
+      ctx.lineTo(b.q3, y);
+      ctx.stroke();
 
-        // q1-q3 bar
-        ctx.beginPath();
-        ctx.strokeStyle = v.options.backgroundColor;
-        ctx.lineWidth = Math.max(2, half * 2);
-        ctx.moveTo(x, b.q1);
-        ctx.lineTo(x, b.q3);
-        ctx.stroke();
-
-        // median line
-        ctx.beginPath();
-        ctx.strokeStyle = v.options.medianColor || v.options.borderColor;
-        ctx.lineWidth = v.options.borderWidth;
-        ctx.moveTo(x - half, b.median);
-        ctx.lineTo(x + half, b.median);
-        ctx.stroke();
-      }
+      // median line
+      ctx.beginPath();
+      ctx.strokeStyle = v.options.medianColor || v.options.borderColor;
+      ctx.lineWidth = v.options.borderWidth;
+      ctx.moveTo(b.median, y - half);
+      ctx.lineTo(b.median, y + half);
+      ctx.stroke();
 
       ctx.restore();
     }
