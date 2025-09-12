@@ -54,7 +54,7 @@
       const boxHeight = Math.max(2, half * 2);
       const top = y - boxHeight / 2;
       ctx.beginPath();
-      ctx.strokeStyle = v.options.backgroundColor;
+      ctx.strokeStyle = v.options.borderColor;
       ctx.lineWidth = v.options.borderWidth;
       ctx.rect(b.q1, top, b.q3 - b.q1, boxHeight);
       ctx.stroke();
