@@ -1,4 +1,5 @@
 const assert=require('assert');
+const { logWarn, logInfo } = require('../client/logging');
 
 function quantile(arr,q){
   const sorted=arr.slice().sort((a,b)=>a-b);
@@ -14,10 +15,10 @@ const boxStats=arr=>{
   if(!Array.isArray(arr) || arr.length===0) return null;
   const valid=arr.filter(v=>Number.isFinite(v));
   if(valid.length!==arr.length){
-    console.warn('Valores no válidos descartados en boxStats:', arr.filter(v=>!Number.isFinite(v)));
+    logWarn('Valores no válidos descartados en boxStats:', arr.filter(v=>!Number.isFinite(v)));
   }
   if(valid.length===0){
-    console.warn('boxStats: no hay datos válidos tras la validación.');
+    logWarn('boxStats: no hay datos válidos tras la validación.');
     return null;
   }
   const sorted=valid.slice().sort((a,b)=>a-b);
@@ -49,7 +50,7 @@ function renderBoxChart(el, labels, boxData, title){
     return ['min','q1','median','q3','max'].every(k=>Number.isFinite(d[k]));
   });
   if(valid.length!==pairs.length){
-    console.warn('Puntos de caja descartados por no ser finitos:', pairs.filter(p=>{
+    logWarn('Puntos de caja descartados por no ser finitos:', pairs.filter(p=>{
       const d=p.data||{};
       return !['min','q1','median','q3','max'].every(k=>Number.isFinite(d[k]));
     }));
@@ -122,4 +123,4 @@ chart=renderBoxChart({id:'c3'}, ['A'], [
 assert.strictEqual(chart, null);
 assert.deepStrictEqual(note, ['c3','La gráfica de cajas no está disponible.']);
 
-console.log('Tests passed');
+logInfo('Tests passed');

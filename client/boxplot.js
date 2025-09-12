@@ -1,7 +1,8 @@
 (function(global){
   const Chart = global.Chart;
   if(!Chart){
-    console.error('Chart.js not found');
+    if(typeof logError === 'function') logError('Chart.js not found');
+    else if(typeof console !== 'undefined' && console.error) console.error('Chart.js not found');
     return;
   }
   const {BarController, elements:{BarElement}} = Chart;

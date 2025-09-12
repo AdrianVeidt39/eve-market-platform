@@ -45,6 +45,7 @@
 </style>
 <!-- Chart.js 4.3.0 + box plot plugin -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.3.0/dist/chart.umd.min.js"></script>
+<script src="logging.js"></script>
 <script src="boxplot.js"></script>
 </head>
 <body>
@@ -270,10 +271,10 @@ try {
   }
   boxPlotAvailable = !!Chart.registry.getController('boxplot');
   if(!boxPlotAvailable){
-    console.warn('chartjs-chart-box-and-violin-plot plugin not loaded; boxplot features disabled');
+    logWarn('chartjs-chart-box-and-violin-plot plugin not loaded; boxplot features disabled');
   }
 } catch(e){
-  console.warn('Error checking boxplot plugin:', e);
+  logError('Error checking boxplot plugin:', e);
   boxPlotAvailable = false;
 }
 
@@ -291,10 +292,10 @@ const boxStats = arr => {
   if(!Array.isArray(arr) || arr.length===0) return null;
   const valid=arr.filter(v=>Number.isFinite(v));
   if(valid.length!==arr.length){
-    console.warn('Valores no válidos descartados en boxStats:', arr.filter(v=>!Number.isFinite(v)));
+    logWarn('Valores no válidos descartados en boxStats:', arr.filter(v=>!Number.isFinite(v)));
   }
   if(valid.length===0){
-    console.warn('boxStats: no hay datos válidos tras la validación.');
+    logWarn('boxStats: no hay datos válidos tras la validación.');
     return null;
   }
   const sorted = valid.slice().sort((a,b)=>a-b);
@@ -340,7 +341,7 @@ function renderBoxChart(el, labels, boxData, title){
     return ['min','q1','median','q3','max'].every(k=>Number.isFinite(d[k]));
   });
   if(valid.length!==pairs.length){
-    console.warn('Puntos de caja descartados por no ser finitos:', pairs.filter(p=>{
+    logWarn('Puntos de caja descartados por no ser finitos:', pairs.filter(p=>{
       const d=p.data||{};
       return !['min','q1','median','q3','max'].every(k=>Number.isFinite(d[k]));
     }));
@@ -395,7 +396,13 @@ function fitBarHeight(canvas, count){
   canvas.style.height=h+'px';
 }
 
-const LOG_ESI = true; // Desactiva en producción
+const LOG_ESI = (() => {
+  const env = (typeof process !== 'undefined' && process.env && process.env.LOG_ESI) ??
+              (typeof window !== 'undefined' && window.ENV && window.ENV.LOG_ESI) ??
+              (typeof localStorage !== 'undefined' && localStorage.getItem('LOG_ESI'));
+  if (env === undefined || env === null) return true;
+  return env === true || env === 'true';
+})();
 
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 24h
 
@@ -431,23 +438,23 @@ async function fetchWithRetry(url, opts = {}, maxRetries = 3) {
     try {
       res = await fetch(url, opts);
     } catch (err) {
-      if (LOG_ESI) console.error(`[ESI] fetch error ${url} (try ${attempt}/${maxRetries}):`, err);
+      if (LOG_ESI) logError(`[ESI] fetch error ${url} (try ${attempt}/${maxRetries}):`, err);
       if (attempt === maxRetries) throw err;
       const delay = 500 * 2 ** attempt;
-      if (LOG_ESI) console.warn(`[ESI] retry ${url} after error; waiting ${delay}ms`);
+      if (LOG_ESI) logWarn(`[ESI] retry ${url} after error; waiting ${delay}ms`);
       await sleep(delay);
       continue;
     }
     const remain = Number(res.headers.get("X-Esi-Error-Limit-Remain") || "100");
     const reset = Number(res.headers.get("X-Esi-Error-Limit-Reset") || "0");
-    if (LOG_ESI) console.log(`[ESI] ${url} -> ${res.status} (try ${attempt}/${maxRetries})`);
+    if (LOG_ESI) logInfo(`[ESI] ${url} -> ${res.status} (try ${attempt}/${maxRetries})`);
     if (![420, 429, 503].includes(res.status)) {
       if (remain <= 1) await sleep(reset * 1000);
       return res;
     }
     if (attempt === maxRetries) throw new Error(`HTTP ${res.status} ${url}`);
     const delay = remain <= 1 ? reset * 1000 : 500 * 2 ** attempt;
-    if (LOG_ESI) console.warn(`[ESI] retry ${url} -> ${res.status}; waiting ${delay}ms`);
+    if (LOG_ESI) logWarn(`[ESI] retry ${url} -> ${res.status}; waiting ${delay}ms`);
     await sleep(delay);
   }
 }
@@ -579,7 +586,7 @@ async function queryMarket(){
     const ids=new Set(); for(const o of ordersRaw){ ids.add(o.type_id); ids.add(o.location_id);} if(ids.size){ const arr=[...ids]; const chunk=900; for(let i=0;i<arr.length;i+=chunk){ const names=await throttleEsiCall(()=>post(`${ESI}/universe/names/`,arr.slice(i,i+chunk))); for(const n of names){ nameCache.set(n.id,n.name);} }}
     const stSel=j('#fStation'); stSel.innerHTML=`<option value="all">Todas</option>` + [...new Set(ordersRaw.map(o=>o.location_id))].map(id=>`<option value="${id}">${nameCache.get(id)||id}</option>`).join("");
     render();
-  }catch(err){ console.error(err); j('#busyHint').style.display='none'; alert('Fallo al consultar ESI. Revisa conexión o intenta con otra región.'); }
+  }catch(err){ logError(err); j('#busyHint').style.display='none'; alert('Fallo al consultar ESI. Revisa conexión o intenta con otra región.'); }
 }
 function filterAndPush(arr){ for(const o of arr){ if(stationsInConstellation.has(o.location_id)) ordersRaw.push(o); } }
 
@@ -668,7 +675,7 @@ function generateCharts(){
             }
           }
         });
-      }catch(e){ console.error(e); showChartNote('chartVol','No se pudo generar la gráfica con los datos actuales.'); }
+      }catch(e){ logError(e); showChartNote('chartVol','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
       showChartNote('chartVol','No hay datos para esta gráfica.');
     }
@@ -697,7 +704,7 @@ function generateCharts(){
             }
           }
         });
-      }catch(e){ console.error(e); showChartNote('chartVolBottom','No se pudo generar la gráfica con los datos actuales.'); }
+      }catch(e){ logError(e); showChartNote('chartVolBottom','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
       showChartNote('chartVolBottom','No hay datos para esta gráfica.');
     }
@@ -734,7 +741,7 @@ function generateCharts(){
             }
           }
         });
-      }catch(e){ console.error(e); showChartNote('chartVal','No se pudo generar la gráfica con los datos actuales.'); }
+      }catch(e){ logError(e); showChartNote('chartVal','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
       showChartNote('chartVal','No hay datos para esta gráfica.');
     }
@@ -763,7 +770,7 @@ function generateCharts(){
             }
           }
         });
-      }catch(e){ console.error(e); showChartNote('chartValBottom','No se pudo generar la gráfica con los datos actuales.'); }
+      }catch(e){ logError(e); showChartNote('chartValBottom','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
       showChartNote('chartValBottom','No hay datos para esta gráfica.');
     }
@@ -794,7 +801,7 @@ function generateCharts(){
             }
           }
         });
-      }catch(e){ console.error(e); showChartNote('chartOrders','No se pudo generar la gráfica con los datos actuales.'); }
+      }catch(e){ logError(e); showChartNote('chartOrders','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
       showChartNote('chartOrders','No hay datos para esta gráfica.');
     }
@@ -823,7 +830,7 @@ function generateCharts(){
             }
           }
         });
-      }catch(e){ console.error(e); showChartNote('chartOrdersBottom','No se pudo generar la gráfica con los datos actuales.'); }
+      }catch(e){ logError(e); showChartNote('chartOrdersBottom','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
       showChartNote('chartOrdersBottom','No hay datos para esta gráfica.');
     }
@@ -848,7 +855,7 @@ function generateCharts(){
             stats.map(x=>x.s),
             'Distribución de precios (top 10 ítems por órdenes) (Gráfico de cajas)'
           );
-        }catch(e){ console.error(e); showChartNote('chartDist','No se pudo generar la gráfica con los datos actuales: ' + (e && e.message ? e.message : e)); }
+        }catch(e){ logError(e); showChartNote('chartDist','No se pudo generar la gráfica con los datos actuales: ' + (e && e.message ? e.message : e)); }
       } else {
         statsTableNote.textContent='No hay datos para la tabla.';
         statsTableNote.style.display='block';
@@ -869,7 +876,7 @@ function generateCharts(){
     if(sysData.length){
       try{
         charts.heat=new Chart(j('#chartHeat'),{type:'bubble',data:{datasets:[{data:sysData,backgroundColor:'rgba(48,163,255,0.5)',borderColor:accentColor}]} ,options:{scales:{x:{display:false},y:{display:false}},plugins:{legend:{display:false},title:{display:true,text:'Órdenes por sistema (Gráfico de burbujas)'},tooltip:{callbacks:{label:ctx=>`${ctx.raw.label}: ${ctx.raw.count} órdenes`}}}}});
-      }catch(e){ console.error(e); showChartNote('chartHeat','No se pudo generar la gráfica con los datos actuales.'); }
+      }catch(e){ logError(e); showChartNote('chartHeat','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
       showChartNote('chartHeat','No hay datos suficientes para esta gráfica.');
     }
@@ -877,7 +884,7 @@ function generateCharts(){
     if(scatterPV.length){
       try{
         charts.scatter=new Chart(j('#chartScatter'),{type:'scatter',data:{datasets:[{data:scatterPV,backgroundColor:'rgba(0,209,178,0.5)',borderColor:accent2Color}]} ,options:{plugins:{legend:{display:false},title:{display:true,text:'Precio vs unidades (Gráfico de dispersión)'}},scales:{x:{title:{display:true,text:'Unidades'}},y:{title:{display:true,text:'Precio'}}}}});
-      }catch(e){ console.error(e); showChartNote('chartScatter','No se pudo generar la gráfica con los datos actuales.'); }
+      }catch(e){ logError(e); showChartNote('chartScatter','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
       showChartNote('chartScatter','No hay datos para esta gráfica.');
     }
@@ -886,7 +893,7 @@ function generateCharts(){
     if(bins.some(v=>v>0)){
       try{
         charts.age=new Chart(j('#chartAge'),{type:'bar',data:{labels:bins.map((_,i)=>i===bins.length-1?`${i}+`:String(i)),datasets:[{data:bins,backgroundColor:palette.slice(0,bins.length),barPercentage:0.75}]},options:{plugins:{legend:{display:false},title:{display:true,text:'Antigüedad de órdenes (Gráfico de barras)'}},scales:{x:{title:{display:true,text:'Días desde emisión'}},y:{title:{display:true,text:'Órdenes'}}}}});
-      }catch(e){ console.error(e); showChartNote('chartAge','No se pudo generar la gráfica con los datos actuales.'); }
+      }catch(e){ logError(e); showChartNote('chartAge','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
       showChartNote('chartAge','No hay datos suficientes para esta gráfica.');
     }
@@ -900,7 +907,7 @@ j('#chartsBtn').addEventListener('click',generateCharts);
 for(const id of ['fType','fSide','fPriceMin','fPriceMax','fVolMin','fVolMax','fMinMin','fMinMax','fRange','fSystem','fStation','fIssued','fDuration']){ j('#'+id).addEventListener('input',render); j('#'+id).addEventListener('change',render); }
 document.querySelectorAll('thead tr.head th.sortable').forEach(th=>{ th.addEventListener('click',()=>{ const k=th.dataset.k; if(!k) return; if(currentSort.k===k){ currentSort.dir*=-1; } else { currentSort.k=k; currentSort.dir=1; } render(); }); });
 
-(async function init(){ try{ await loadRegions(); } catch(e){ console.error(e); alert('Error cargando catálogos de ESI. Revisa tu conexión e inténtalo de nuevo.'); } })();
+(async function init(){ try{ await loadRegions(); } catch(e){ logError(e); alert('Error cargando catálogos de ESI. Revisa tu conexión e inténtalo de nuevo.'); } })();
 </script>
 </body>
 </html>
