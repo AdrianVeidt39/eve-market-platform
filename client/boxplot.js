@@ -49,20 +49,21 @@
       ctx.lineTo(b.max, y + half);
       ctx.stroke();
 
-      // q1-q3 bar
+      // q1-q3 box (outline only)
+      const boxHeight = Math.max(2, half * 2);
+      const top = y - boxHeight / 2;
       ctx.beginPath();
       ctx.strokeStyle = v.options.backgroundColor;
-      ctx.lineWidth = Math.max(2, half * 2);
-      ctx.moveTo(b.q1, y);
-      ctx.lineTo(b.q3, y);
+      ctx.lineWidth = v.options.borderWidth;
+      ctx.rect(b.q1, top, b.q3 - b.q1, boxHeight);
       ctx.stroke();
 
       // median line
       ctx.beginPath();
       ctx.strokeStyle = v.options.medianColor || v.options.borderColor;
       ctx.lineWidth = v.options.borderWidth;
-      ctx.moveTo(b.median, y - half);
-      ctx.lineTo(b.median, y + half);
+      ctx.moveTo(b.median, top);
+      ctx.lineTo(b.median, top + boxHeight);
       ctx.stroke();
 
       ctx.restore();
