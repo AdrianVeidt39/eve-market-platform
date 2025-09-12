@@ -22,72 +22,68 @@
       if(horizontal){
         const y = v.y;
         const height = v.height;
-        const y0 = y - height / 2;
-        // box
-        ctx.fillRect(b.q1, y0, b.q3 - b.q1, height);
-        ctx.strokeRect(b.q1, y0, b.q3 - b.q1, height);
-
-        // whiskers
+        const half = Math.min(height / 4, 4);
+        // whisker line
         ctx.beginPath();
         ctx.moveTo(b.min, y);
-        ctx.lineTo(b.q1, y);
-        ctx.moveTo(b.min, y0);
-        ctx.lineTo(b.min, y0 + height);
-        ctx.moveTo(b.max, y);
+        ctx.lineTo(b.max, y);
+        ctx.stroke();
+
+        // min/max caps
+        ctx.beginPath();
+        ctx.moveTo(b.min, y - half);
+        ctx.lineTo(b.min, y + half);
+        ctx.moveTo(b.max, y - half);
+        ctx.lineTo(b.max, y + half);
+        ctx.stroke();
+
+        // q1-q3 bar
+        ctx.beginPath();
+        ctx.strokeStyle = v.options.backgroundColor;
+        ctx.lineWidth = Math.max(2, half * 2);
+        ctx.moveTo(b.q1, y);
         ctx.lineTo(b.q3, y);
-        ctx.moveTo(b.max, y0);
-        ctx.lineTo(b.max, y0 + height);
         ctx.stroke();
 
         // median line
         ctx.beginPath();
         ctx.strokeStyle = v.options.medianColor || v.options.borderColor;
-        ctx.moveTo(b.median, y0);
-        ctx.lineTo(b.median, y0 + height);
-        ctx.stroke();
-
-        // quartile lines
-        ctx.beginPath();
-        ctx.strokeStyle = v.options.quartileColor || v.options.borderColor;
-        ctx.moveTo(b.q1, y0);
-        ctx.lineTo(b.q1, y0 + height);
-        ctx.moveTo(b.q3, y0);
-        ctx.lineTo(b.q3, y0 + height);
+        ctx.lineWidth = v.options.borderWidth;
+        ctx.moveTo(b.median, y - half);
+        ctx.lineTo(b.median, y + half);
         ctx.stroke();
       } else {
         const x = v.x;
         const width = v.width;
-        const x0 = x - width / 2;
-        // box
-        ctx.fillRect(x0, b.q1, width, b.q3 - b.q1);
-        ctx.strokeRect(x0, b.q1, width, b.q3 - b.q1);
-
-        // whiskers
+        const half = Math.min(width / 4, 4);
+        // whisker line
         ctx.beginPath();
         ctx.moveTo(x, b.min);
-        ctx.lineTo(x, b.q1);
-        ctx.moveTo(x0, b.min);
-        ctx.lineTo(x0 + width, b.min);
-        ctx.moveTo(x, b.max);
+        ctx.lineTo(x, b.max);
+        ctx.stroke();
+
+        // min/max caps
+        ctx.beginPath();
+        ctx.moveTo(x - half, b.min);
+        ctx.lineTo(x + half, b.min);
+        ctx.moveTo(x - half, b.max);
+        ctx.lineTo(x + half, b.max);
+        ctx.stroke();
+
+        // q1-q3 bar
+        ctx.beginPath();
+        ctx.strokeStyle = v.options.backgroundColor;
+        ctx.lineWidth = Math.max(2, half * 2);
+        ctx.moveTo(x, b.q1);
         ctx.lineTo(x, b.q3);
-        ctx.moveTo(x0, b.max);
-        ctx.lineTo(x0 + width, b.max);
         ctx.stroke();
 
         // median line
         ctx.beginPath();
         ctx.strokeStyle = v.options.medianColor || v.options.borderColor;
-        ctx.moveTo(x0, b.median);
-        ctx.lineTo(x0 + width, b.median);
-        ctx.stroke();
-
-        // quartile lines
-        ctx.beginPath();
-        ctx.strokeStyle = v.options.quartileColor || v.options.borderColor;
-        ctx.moveTo(x0, b.q1);
-        ctx.lineTo(x0 + width, b.q1);
-        ctx.moveTo(x0, b.q3);
-        ctx.lineTo(x0 + width, b.q3);
+        ctx.lineWidth = v.options.borderWidth;
+        ctx.moveTo(x - half, b.median);
+        ctx.lineTo(x + half, b.median);
         ctx.stroke();
       }
 
