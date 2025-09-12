@@ -45,7 +45,7 @@
 </style>
 <!-- Chart.js 4.3.0 + box plot plugin -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.3.0/dist/chart.umd.min.js"></script>
-<script src="boxplot.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-box-and-violin-plot@4.2.3/build/index.umd.min.js"></script>
 </head>
 <body>
   <div class="wrap">
@@ -343,14 +343,19 @@ function renderBoxChart(el, labels, boxData, title){
       plugins:[flatLinePlugin(colors)]
     });
   }
-  const dataAsArrays = boxData.map(d=>[d.min,d.q1,d.median,d.q3,d.max]);
   fitBarHeight(el, labels.length);
   return new Chart(el,{
     type:'boxplot',
     data:{
       labels,
       datasets:[{
-        data:dataAsArrays,
+        data:boxData.map(d=>({
+          min:d.min,
+          q1:d.q1,
+          median:d.median,
+          q3:d.q3,
+          max:d.max
+        })),
         backgroundColor:colors,
         borderColor:'#fff',
         borderWidth:1,
@@ -810,11 +815,14 @@ function generateCharts(){
         statsTableWrap.style.display='block';
         statsTableTitle.style.display='block';
         try{
+          const distTitle = stats.length === 1
+            ? `Distribución de precios de ${stats[0].name} (Gráfico de cajas)`
+            : 'Distribución de precios (top 10 ítems por órdenes) (Gráfico de cajas)';
           charts.dist=renderBoxChart(
             j('#chartDist'),
             stats.map(x=>x.name),
             stats.map(x=>x.s),
-            'Distribución de precios (top 10 ítems por órdenes) (Gráfico de cajas)'
+            distTitle
           );
         }catch(e){ console.error(e); showChartNote('chartDist','No se pudo generar la gráfica con los datos actuales: ' + (e && e.message ? e.message : e)); }
       } else {

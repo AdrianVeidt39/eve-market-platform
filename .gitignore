@@ -1,3 +1,5 @@
 __pycache__/
 *.pyc
 esi_cache.sqlite
+chartjs-chart-box-and-violin-plot/build/
+chartjs-chart-box-and-violin-plot/node_modules/
