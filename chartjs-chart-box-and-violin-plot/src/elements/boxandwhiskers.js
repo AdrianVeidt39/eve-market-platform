@@ -82,7 +82,7 @@ const BoxAndWiskers = Chart.elements.BoxAndWhiskers = ArrayElementBase.extend({
 
     if (boxplot.min === boxplot.max && boxplot.min === boxplot.q1 && boxplot.min === boxplot.median && boxplot.min === boxplot.q3) {
       const x = boxplot.min;
-      const size = height / 2;
+      const size = Math.min(height / 4, 4);
       ctx.beginPath();
       ctx.moveTo(x - size, y0);
       ctx.lineTo(x + size, y0 + height);
