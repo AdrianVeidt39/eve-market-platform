@@ -73,18 +73,13 @@ function renderBoxChart(el, labels, boxData, title){
       plugins:[flatLinePlugin(colors)]
     });
   }
+  const dataAsArrays=boxData.map(d=>[d.min,d.q1,d.median,d.q3,d.max]);
   return new Chart(el,{
     type:'boxplot',
     data:{
       labels,
       datasets:[{
-        data:boxData.map(d=>({
-          min:d.min,
-          q1:d.q1,
-          median:d.median,
-          q3:d.q3,
-          max:d.max
-        })),
+        data:dataAsArrays,
         backgroundColor:colors,
         borderColor:'#fff',
         borderWidth:1,
