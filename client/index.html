@@ -221,6 +221,27 @@ const fmtBig = n=>{
   return Number(n).toLocaleString("es-MX",{maximumFractionDigits:0});
 };
 const sleep = ms=>new Promise(r=>setTimeout(r,ms));
+// Queue to throttle ESI calls and ensure at least 300ms between requests
+const _esiQueue=[];
+let _esiActive=false;
+function throttleEsiCall(fn){
+  return new Promise((resolve,reject)=>{
+    _esiQueue.push({fn,resolve,reject});
+    processEsiQueue();
+  });
+}
+function processEsiQueue(){
+  if(_esiActive||!_esiQueue.length) return;
+  _esiActive=true;
+  const {fn,resolve,reject}=_esiQueue.shift();
+  Promise.resolve().then(fn).then(res=>{
+    setTimeout(()=>{ _esiActive=false; processEsiQueue(); },300);
+    resolve(res);
+  }).catch(err=>{
+    setTimeout(()=>{ _esiActive=false; processEsiQueue(); },300);
+    reject(err);
+  });
+}
 const palette = ['#30a3ff','#00d1b2','#ff6b6b','#ffc107','#9b59b6','#e67e22','#2ecc71','#f39c12','#8e44ad','#1abc9c'];
 const styles = getComputedStyle(document.documentElement);
 const accentColor = styles.getPropertyValue('--accent') || '#30a3ff';
@@ -487,8 +508,8 @@ async function loadRegions(){
     sel.innerHTML = `<option value="" disabled selected>Selecciona región…</option>` + regions.map(r=>`<option value="${r.id}">${r.name}</option>`).join("");
     return;
   }
-  const {data:ids}=await get(`${ESI}/universe/regions/`);
-  const names=await post(`${ESI}/universe/names/`,ids);
+  const {data:ids}=await throttleEsiCall(()=>get(`${ESI}/universe/regions/`));
+  const names=await throttleEsiCall(()=>post(`${ESI}/universe/names/`,ids));
   regions=names.filter(x=>x.category==="region").map(x=>({id:x.id,name:x.name})).sort((a,b)=>a.name.localeCompare(b.name));
   setCache('esi.regions',regions);
   sel.innerHTML = `<option value="" disabled selected>Selecciona región…</option>` + regions.map(r=>`<option value="${r.id}">${r.name}</option>`).join("");
@@ -505,8 +526,8 @@ async function onRegionChange(){
     sel.disabled=false;
     return;
   }
-  const {data:regionDetail}=await get(`${ESI}/universe/regions/${regionId}/`);
-  const names=await post(`${ESI}/universe/names/`,regionDetail.constellations);
+  const {data:regionDetail}=await throttleEsiCall(()=>get(`${ESI}/universe/regions/${regionId}/`));
+  const names=await throttleEsiCall(()=>post(`${ESI}/universe/names/`,regionDetail.constellations));
   constellations=names.filter(x=>x.category==="constellation").map(x=>({id:x.id,name:x.name})).sort((a,b)=>a.name.localeCompare(b.name));
   sel.innerHTML = `<option value="" disabled selected>Selecciona constelación…</option>` + constellations.map(c=>`<option value="${c.id}">${c.name}</option>`).join("");
   sel.disabled=false;
@@ -528,15 +549,15 @@ async function onConstellationChange(){
     j('#queryBtn').disabled=false;
     return;
   }
-  const {data:cons}=await get(`${ESI}/universe/constellations/${consId}/`);
-  const sysNames=await post(`${ESI}/universe/names/`,cons.systems);
+  const {data:cons}=await throttleEsiCall(()=>get(`${ESI}/universe/constellations/${consId}/`));
+  const sysNames=await throttleEsiCall(()=>post(`${ESI}/universe/names/`,cons.systems));
   systems=sysNames.filter(x=>x.category==="solar_system").map(x=>({id:x.id,name:x.name,pos:{x:0,y:0}})).sort((a,b)=>a.name.localeCompare(b.name));
   systems.forEach(s=>systemNameMap.set(s.id,s.name));
   for(const s of systems){
-    const {data:sysd}=await get(`${ESI}/universe/systems/${s.id}/`);
+    const {data:sysd}=await throttleEsiCall(()=>get(`${ESI}/universe/systems/${s.id}/`));
     const st=sysd.stations||[];
     s.pos={x:sysd.position.x,y:sysd.position.y};
-    for(const stid of st){ stationsInConstellation.add(stid); stationToSystem.set(stid,s.id);} await sleep(30);
+    for(const stid of st){ stationsInConstellation.add(stid); stationToSystem.set(stid,s.id);} 
   }
   sysSel.innerHTML = `<option value="all">Todos</option>` + systems.map(s=>`<option value="${s.id}">${s.name}</option>`).join("");
   j('#queryBtn').disabled=false;
@@ -551,11 +572,11 @@ async function queryMarket(){
     if(!stationsInConstellation.size){ j('#systemNote').style.display='block'; j('#systemNote').innerHTML='<span class="danger">Esta constelación no tiene estaciones NPC públicas.</span> ESI no expone órdenes de estructuras sin autenticación.'; ordersRaw=[]; render(); return; }
     ordersRaw=[]; j('#busyHint').style.display='flex';
     const orderType='all';
-    const first=await get(`${ESI}/markets/${regionId}/orders/?order_type=${orderType}&page=1`);
+    const first=await throttleEsiCall(()=>get(`${ESI}/markets/${regionId}/orders/?order_type=${orderType}&page=1`));
     const totalPages=first.pages||1; filterAndPush(first.data); j('#pagesInfo').textContent=`1 / ${totalPages} páginas`;
-    for(let p=2;p<=totalPages;p++){ const {data}=await get(`${ESI}/markets/${regionId}/orders/?order_type=${orderType}&page=${p}`); filterAndPush(data); j('#pagesInfo').textContent=`${p} / ${totalPages} páginas`; await sleep(250); }
+    for(let p=2;p<=totalPages;p++){ const {data}=await throttleEsiCall(()=>get(`${ESI}/markets/${regionId}/orders/?order_type=${orderType}&page=${p}`)); filterAndPush(data); j('#pagesInfo').textContent=`${p} / ${totalPages} páginas`; }
     j('#busyHint').style.display='none';
-    const ids=new Set(); for(const o of ordersRaw){ ids.add(o.type_id); ids.add(o.location_id);} if(ids.size){ const arr=[...ids]; const chunk=900; for(let i=0;i<arr.length;i+=chunk){ const names=await post(`${ESI}/universe/names/`,arr.slice(i,i+chunk)); for(const n of names){ nameCache.set(n.id,n.name);} await sleep(30);} }
+    const ids=new Set(); for(const o of ordersRaw){ ids.add(o.type_id); ids.add(o.location_id);} if(ids.size){ const arr=[...ids]; const chunk=900; for(let i=0;i<arr.length;i+=chunk){ const names=await throttleEsiCall(()=>post(`${ESI}/universe/names/`,arr.slice(i,i+chunk))); for(const n of names){ nameCache.set(n.id,n.name);} }}
     const stSel=j('#fStation'); stSel.innerHTML=`<option value="all">Todas</option>` + [...new Set(ordersRaw.map(o=>o.location_id))].map(id=>`<option value="${id}">${nameCache.get(id)||id}</option>`).join("");
     render();
   }catch(err){ console.error(err); j('#busyHint').style.display='none'; alert('Fallo al consultar ESI. Revisa conexión o intenta con otra región.'); }
