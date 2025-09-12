@@ -20,19 +20,22 @@
       ctx.fillStyle = v.options.backgroundColor;
       ctx.strokeStyle = v.options.borderColor;
       ctx.lineWidth = v.options.borderWidth;
+      const top = Math.min(b.q1, b.q3);
+      const bottom = Math.max(b.q1, b.q3);
+
       // box
-      ctx.fillRect(x0, b.q1, width, b.q3 - b.q1);
-      ctx.strokeRect(x0, b.q1, width, b.q3 - b.q1);
+      ctx.fillRect(x0, top, width, bottom - top);
+      ctx.strokeRect(x0, top, width, bottom - top);
 
       // whiskers
       ctx.beginPath();
       ctx.strokeStyle = v.options.borderColor;
       ctx.moveTo(x, b.min);
-      ctx.lineTo(x, b.q1);
+      ctx.lineTo(x, bottom);
       ctx.moveTo(x0, b.min);
       ctx.lineTo(x0 + width, b.min);
       ctx.moveTo(x, b.max);
-      ctx.lineTo(x, b.q3);
+      ctx.lineTo(x, top);
       ctx.moveTo(x0, b.max);
       ctx.lineTo(x0 + width, b.max);
       ctx.stroke();
@@ -42,15 +45,6 @@
       ctx.strokeStyle = v.options.medianColor || v.options.borderColor;
       ctx.moveTo(x0, b.median);
       ctx.lineTo(x0 + width, b.median);
-      ctx.stroke();
-
-      // quartile lines
-      ctx.beginPath();
-      ctx.strokeStyle = v.options.quartileColor || v.options.borderColor;
-      ctx.moveTo(x0, b.q1);
-      ctx.lineTo(x0 + width, b.q1);
-      ctx.moveTo(x0, b.q3);
-      ctx.lineTo(x0 + width, b.q3);
       ctx.stroke();
 
       ctx.restore();
