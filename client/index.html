@@ -406,7 +406,17 @@ window.clearEsiCache=clearCache;
 async function fetchWithRetry(url, opts = {}, maxRetries = 3) {
   opts.headers = { ...(opts.headers || {}), "User-Agent": USER_AGENT };
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const res = await fetch(url, opts);
+    let res;
+    try {
+      res = await fetch(url, opts);
+    } catch (err) {
+      if (LOG_ESI) console.error(`[ESI] fetch error ${url} (try ${attempt}/${maxRetries}):`, err);
+      if (attempt === maxRetries) throw err;
+      const delay = 500 * 2 ** attempt;
+      if (LOG_ESI) console.warn(`[ESI] retry ${url} after error; waiting ${delay}ms`);
+      await sleep(delay);
+      continue;
+    }
     const remain = Number(res.headers.get("X-Esi-Error-Limit-Remain") || "100");
     const reset = Number(res.headers.get("X-Esi-Error-Limit-Reset") || "0");
     if (LOG_ESI) console.log(`[ESI] ${url} -> ${res.status} (try ${attempt}/${maxRetries})`);
