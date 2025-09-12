@@ -100,6 +100,8 @@ const BoxAndWiskers = Chart.elements.BoxAndWhiskers = ArrayElementBase.extend({
     }
 
     // Draw the whiskers
+    ctx.save();
+    ctx.lineWidth = Math.min(vm.borderWidth, 2);
     ctx.beginPath();
     ctx.moveTo(boxplot.whiskerMin, y0);
     ctx.lineTo(boxplot.whiskerMin, y0 + height);
@@ -111,6 +113,7 @@ const BoxAndWiskers = Chart.elements.BoxAndWhiskers = ArrayElementBase.extend({
     ctx.lineTo(boxplot.q3, y);
     ctx.closePath();
     ctx.stroke();
+    ctx.restore();
 
     // Draw the q1>q3 box
     if (boxplot.q3 > boxplot.q1) {

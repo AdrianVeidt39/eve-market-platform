@@ -17,7 +17,8 @@
       ctx.save();
       ctx.fillStyle = v.options.backgroundColor;
       ctx.strokeStyle = v.options.borderColor;
-      ctx.lineWidth = v.options.borderWidth;
+      const whiskerWidth = Math.min(v.options.borderWidth, 2);
+      ctx.lineWidth = whiskerWidth;
 
       const y = v.y;
       const height = v.height;
