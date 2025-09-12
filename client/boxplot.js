@@ -4,7 +4,7 @@
     console.error('Chart.js not found');
     return;
   }
-  const {BarController, elements:{Rectangle}, helpers} = Chart;
+  const {BarController, elements:{Rectangle}} = Chart;
 
   class BoxAndWhiskers extends Rectangle {
     draw(ctx){
@@ -41,12 +41,12 @@
     }
   }
   BoxAndWhiskers.id = 'boxandwhiskers';
-  BoxAndWhiskers.defaults = helpers.merge({}, [Rectangle.defaults]);
+  BoxAndWhiskers.defaults = Object.assign({}, Rectangle.defaults);
 
   class BoxPlotController extends BarController {
     static id = 'boxplot';
-    static defaults = helpers.merge({}, [BarController.defaults]);
-    static overrides = helpers.merge({}, [BarController.overrides]);
+    static defaults = Object.assign({}, BarController.defaults);
+    static overrides = Object.assign({}, BarController.overrides);
 
     parsePrimitiveData(meta, data, start, count){
       const parsed = meta._parsed;
