@@ -20,17 +20,18 @@
       const whiskerWidth = v.options.borderWidth;
       ctx.lineWidth = whiskerWidth;
       const align = p => Math.round(p) + 0.5;
-      const y = v.y;
-      const height = v.height;
+      const { y, height } = v.getProps(['y', 'height'], true);
       const half = Math.min(height / 4, 4);
       const y0 = align(y);
       const ymin = align(y - half);
       const ymax = align(y + half);
-      const xmin = align(b.min);
-      const xq1 = align(b.q1);
-      const xmed = align(b.median);
-      const xq3 = align(b.q3);
-      const xmax = align(b.max);
+      const meta = v.$context.chart._metasets[v.$context.datasetIndex];
+      const scale = meta.vScale;
+      const xmin = align(scale.getPixelForValue(b.min));
+      const xq1 = align(scale.getPixelForValue(b.q1));
+      const xmed = align(scale.getPixelForValue(b.median));
+      const xq3 = align(scale.getPixelForValue(b.q3));
+      const xmax = align(scale.getPixelForValue(b.max));
 
       if(xmin === xmax && xmin === xq1 && xmin === xmed && xmin === xq3){
         const x = xmin;
@@ -109,15 +110,7 @@
       const [min,q1,median,q3,max] = Array.isArray(raw)
         ? raw
         : [raw.min, raw.q1, raw.median, raw.q3, raw.max];
-
-      const scale = this._cachedMeta.vScale;
-      elem.box = {
-        min: scale.getPixelForValue(min),
-        q1: scale.getPixelForValue(q1),
-        median: scale.getPixelForValue(median),
-        q3: scale.getPixelForValue(q3),
-        max: scale.getPixelForValue(max)
-      };
+      elem.box = { min, q1, median, q3, max };
     }
   }
   BoxPlotController.prototype.dataElementType = BoxAndWhiskers;

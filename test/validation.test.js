@@ -74,16 +74,16 @@ function renderBoxChart(el, labels, boxData, title){
       plugins:[flatLinePlugin(colors)]
     });
   }
-  const dataAsArrays=boxData.map(d=>[d.min,d.q1,d.median,d.q3,d.max]);
   return new Chart(el,{
     type:'boxplot',
     data:{
       labels,
       datasets:[{
-        data:dataAsArrays,
+        parsing:false,
+        data:boxData.map(d=>({min:d.min,q1:d.q1,median:d.median,q3:d.q3,max:d.max})),
         backgroundColor:'transparent',
         borderColor:colors,
-        borderWidth:1,
+        borderWidth:2,
         medianColor:'#fff',
         quartileColor:'#fff'
       }]
@@ -100,13 +100,16 @@ assert.strictEqual(boxStats([null,'a',Infinity]), null);
 // Tests for renderBoxChart
 note=null;
 let chart=renderBoxChart({id:'c'}, ['A','B','C','D'], [
-  {min:1,q1:1,median:1,q3:1,max:1},
+  {min:1,q1:2,median:3,q3:4,max:5},
   {min:2,q1:2,median:2,q3:2,max:Infinity},
   {min:3,q1:null,median:3,q3:4,max:5},
   {min:4,q1:4,median:'bad',q3:5,max:6}
 ], 't');
 assert(chart instanceof Chart);
 assert.deepStrictEqual(chart.config.data.labels, ['A']);
+assert.deepStrictEqual(chart.config.data.datasets[0].data, [
+  {min:1,q1:2,median:3,q3:4,max:5}
+]);
 
 note=null;
 chart=renderBoxChart({id:'c2'}, ['A'], [

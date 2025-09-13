@@ -269,7 +269,7 @@ try {
       ViolinPlotElement
     );
   }
-  boxPlotAvailable = !!Chart.registry.getController('boxplot');
+  boxPlotAvailable = Chart.registry.getController('boxplot') != null;
   if(!boxPlotAvailable){
     logWarn('chartjs-chart-box-and-violin-plot plugin not loaded; boxplot features disabled');
   }
@@ -366,14 +366,14 @@ function renderBoxChart(el, labels, boxData, title){
       plugins:[flatLinePlugin(colors)]
     });
   }
-  const dataAsArrays = boxData.map(d=>[d.min,d.q1,d.median,d.q3,d.max]);
   fitBarHeight(el, labels.length, 1);
   return new Chart(el,{
     type:'boxplot',
     data:{
       labels,
       datasets:[{
-        data:dataAsArrays,
+        parsing:false,
+        data:boxData.map(d=>({min:d.min,q1:d.q1,median:d.median,q3:d.q3,max:d.max})),
         backgroundColor:'transparent',
         borderColor:colors,
         borderWidth:2,
