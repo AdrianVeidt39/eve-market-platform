@@ -372,7 +372,6 @@ function renderBoxChart(el, labels, boxData, title){
     data:{
       labels,
       datasets:[{
-        parsing:false,
         data:boxData.map(d=>({min:d.min,q1:d.q1,median:d.median,q3:d.q3,max:d.max})),
         backgroundColor:'transparent',
         borderColor:colors,
