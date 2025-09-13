@@ -108,6 +108,8 @@
       </div>
       <canvas id="chartHeat"></canvas>
       <p id="chartHeatNote" class="note" style="display:none"></p>
+      <canvas id="chartGates"></canvas>
+      <p id="chartGatesNote" class="note" style="display:none"></p>
       <canvas id="chartScatter"></canvas>
       <p id="chartScatterNote" class="note" style="display:none"></p>
       <canvas id="chartAge"></canvas>
@@ -326,7 +328,7 @@ let ordersRaw=[];
 let nameCache=new Map();
 let currentSort={k:"type_name",dir:1};
 let charts={};
-const chartIds=['chartVol','chartVolBottom','chartVal','chartValBottom','chartOrders','chartOrdersBottom','chartHeat','chartScatter','chartAge'];
+const chartIds=['chartVol','chartVolBottom','chartVal','chartValBottom','chartOrders','chartOrdersBottom','chartHeat','chartGates','chartScatter','chartAge'];
 
 function showChartNote(id,msg){
   const canvas=j('#'+id);
@@ -398,13 +400,24 @@ async function onConstellationChange(){
   }
   const {data:cons}=await throttleEsiCall(()=>get(`${ESI}/universe/constellations/${consId}/`));
   const sysNames=await throttleEsiCall(()=>post(`${ESI}/universe/names/`,cons.systems));
-  systems=sysNames.filter(x=>x.category==="solar_system").map(x=>({id:x.id,name:x.name,pos:{x:0,y:0}})).sort((a,b)=>a.name.localeCompare(b.name));
+  systems=sysNames.filter(x=>x.category==="solar_system").map(x=>({id:x.id,name:x.name,pos:{x:0,y:0},gatesWithin:0,gatesOutside:0})).sort((a,b)=>a.name.localeCompare(b.name));
   systems.forEach(s=>systemNameMap.set(s.id,s.name));
+  const consSystems=new Set(cons.systems);
   for(const s of systems){
     const {data:sysd}=await throttleEsiCall(()=>get(`${ESI}/universe/systems/${s.id}/`));
     const st=sysd.stations||[];
     s.pos={x:sysd.position.x,y:sysd.position.y};
-    for(const stid of st){ stationsInConstellation.add(stid); stationToSystem.set(stid,s.id);} 
+    let gw=0,go=0;
+    for(const gId of sysd.stargates||[]){
+      const gKey=`esi.stargate.${gId}`;
+      let gate=getCache(gKey);
+      if(!gate){
+        try{ const {data:gd}=await throttleEsiCall(()=>get(`${ESI}/universe/stargates/${gId}/`)); gate=gd; setCache(gKey,gate);}catch(e){ logError(e); continue; }
+      }
+      if(gate && gate.destination && consSystems.has(gate.destination.system_id)) gw++; else go++;
+    }
+    s.gatesWithin=gw; s.gatesOutside=go;
+    for(const stid of st){ stationsInConstellation.add(stid); stationToSystem.set(stid,s.id);}
   }
   sysSel.innerHTML = `<option value="all">Todos</option>` + systems.map(s=>`<option value="${s.id}">${s.name}</option>`).join("");
   j('#queryBtn').disabled=false;
@@ -467,6 +480,7 @@ function generateCharts(){
   const priceMap=new Map();
   const orderCount=new Map();
   const sysCount=new Map();
+  const sysUnits=new Map();
   const scatterPV=[];
   const days=[];
   for(const r of rows){
@@ -475,6 +489,7 @@ function generateCharts(){
     priceMap.get(r.type_name).push(r.price);
     orderCount.set(r.type_name,(orderCount.get(r.type_name)||0)+1);
     sysCount.set(r.system_id,(sysCount.get(r.system_id)||0)+1);
+    sysUnits.set(r.system_id,(sysUnits.get(r.system_id)||0)+r.volume_remain);
     scatterPV.push({x:r.volume_remain,y:r.price});
     days.push(Math.trunc((Date.now()-new Date(r.issued).getTime())/86400000));
   }
@@ -677,6 +692,21 @@ function generateCharts(){
       }catch(e){ logError(e); showChartNote('chartHeat','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
       showChartNote('chartHeat','No hay datos suficientes para esta gráfica.');
+    }
+
+    const gateData=[]; let maxUnits=0;
+    systems.forEach(s=>{
+      const u=sysUnits.get(s.id)||0;
+      if(u>0){ gateData.push({x:s.gatesWithin||0,y:s.gatesOutside||0,units:u,label:s.name}); if(u>maxUnits) maxUnits=u; }
+    });
+    if(gateData.length){
+      const scale=maxUnits?20/Math.sqrt(maxUnits):1;
+      gateData.forEach(d=>{d.r=Math.sqrt(d.units)*scale;});
+      try{
+        charts.gates=new Chart(j('#chartGates'),{type:'bubble',data:{datasets:[{data:gateData,backgroundColor:'rgba(48,163,255,0.5)',borderColor:accentColor}]},options:{plugins:{legend:{display:false},title:{display:true,text:'Unidades vs stargates por sistema (Gráfico de burbujas)'},tooltip:{callbacks:{label:ctx=>`${ctx.raw.label}: ${fmtBig(ctx.raw.units)} unidades`}}},scales:{x:{title:{display:true,text:'Stargates dentro de constelación'}},y:{title:{display:true,text:'Stargates a otras constelaciones'}}}}});
+      }catch(e){ logError(e); showChartNote('chartGates','No se pudo generar la gráfica con los datos actuales.'); }
+    } else {
+      showChartNote('chartGates','No hay datos suficientes para esta gráfica.');
     }
 
     if(scatterPV.length){
