@@ -232,6 +232,33 @@ const accent2Color = styles.getPropertyValue('--accent2') || '#00d1b2';
 
 Chart.defaults.color = '#fff';
 
+const bubbleLabelPlugin = {
+  id:'bubbleLabel',
+  afterDatasetsDraw(chart,args,opts){
+    if(chart.config.type !== 'bubble') return;
+    const {ctx}=chart;
+    ctx.save();
+    chart.data.datasets.forEach((dataset,i)=>{
+      const meta=chart.getDatasetMeta(i);
+      meta.data.forEach((el,idx)=>{
+        const raw=dataset.data[idx];
+        if(!raw) return;
+        const val=raw.count ?? raw.units;
+        const lines=[raw.label, fmtInt(val||0)+' artículos'];
+        ctx.fillStyle=(opts&&opts.color)||'#fff';
+        ctx.font=(opts&&opts.font)||'10px sans-serif';
+        ctx.textAlign='center';
+        ctx.textBaseline='middle';
+        const lh=ctx.measureText('M').width*1.2;
+        lines.forEach((line,i)=>{ ctx.fillText(line, el.x, el.y - (lh*(lines.length-1)/2) + i*lh); });
+      });
+    });
+    ctx.restore();
+  }
+};
+Chart.register(bubbleLabelPlugin);
+Chart.defaults.plugins.bubbleLabel={color:'#fff',font:'10px sans-serif'};
+
 function fitBarHeight(canvas, count, factor=1){
   const minHeight=160*factor;
   const h=Math.max(minHeight, count*32*factor);
