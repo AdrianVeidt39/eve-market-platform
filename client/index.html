@@ -97,24 +97,22 @@
           <canvas id="chartValBottom"></canvas>
           <p id="chartValBottomNote" class="note" style="display:none"></p>
         </div>
-        <div>
-          <canvas id="chartOrdersBottom"></canvas>
-          <p id="chartOrdersBottomNote" class="note" style="display:none"></p>
-        </div>
-        <div>
-          <canvas id="chartVolBottom"></canvas>
-          <p id="chartVolBottomNote" class="note" style="display:none"></p>
-        </div>
+      <div>
+        <canvas id="chartOrdersBottom"></canvas>
+        <p id="chartOrdersBottomNote" class="note" style="display:none"></p>
       </div>
-      <canvas id="chartHeat"></canvas>
-      <p id="chartHeatNote" class="note" style="display:none"></p>
-      <canvas id="chartGates"></canvas>
-      <p id="chartGatesNote" class="note" style="display:none"></p>
-      <canvas id="chartScatter"></canvas>
-      <p id="chartScatterNote" class="note" style="display:none"></p>
-      <canvas id="chartAge"></canvas>
-      <p id="chartAgeNote" class="note" style="display:none"></p>
+    <div>
+      <canvas id="chartVolBottom"></canvas>
+      <p id="chartVolBottomNote" class="note" style="display:none"></p>
     </div>
+  </div>
+    <canvas id="chartGates"></canvas>
+    <p id="chartGatesNote" class="note" style="display:none"></p>
+    <canvas id="chartScatter"></canvas>
+    <p id="chartScatterNote" class="note" style="display:none"></p>
+    <canvas id="chartAge"></canvas>
+    <p id="chartAgeNote" class="note" style="display:none"></p>
+  </div>
 
     <div class="card" style="margin-top:16px">
       <div class="section-title">Órdenes encontradas</div>
@@ -355,7 +353,7 @@ let ordersRaw=[];
 let nameCache=new Map();
 let currentSort={k:"type_name",dir:1};
 let charts={};
-const chartIds=['chartVol','chartVolBottom','chartVal','chartValBottom','chartOrders','chartOrdersBottom','chartHeat','chartGates','chartScatter','chartAge'];
+const chartIds=['chartVol','chartVolBottom','chartVal','chartValBottom','chartOrders','chartOrdersBottom','chartGates','chartScatter','chartAge'];
 
 function showChartNote(id,msg){
   const canvas=j('#'+id);
@@ -506,7 +504,6 @@ function generateCharts(){
   const volMap=new Map();
   const priceMap=new Map();
   const orderCount=new Map();
-  const sysCount=new Map();
   const sysUnits=new Map();
   const scatterPV=[];
   const days=[];
@@ -515,7 +512,6 @@ function generateCharts(){
     if(!priceMap.has(r.type_name)) priceMap.set(r.type_name,[]);
     priceMap.get(r.type_name).push(r.price);
     orderCount.set(r.type_name,(orderCount.get(r.type_name)||0)+1);
-    sysCount.set(r.system_id,(sysCount.get(r.system_id)||0)+1);
     sysUnits.set(r.system_id,(sysUnits.get(r.system_id)||0)+r.volume_remain);
     scatterPV.push({x:r.volume_remain,y:r.price});
     days.push(Math.trunc((Date.now()-new Date(r.issued).getTime())/86400000));
@@ -705,20 +701,6 @@ function generateCharts(){
       }catch(e){ logError(e); showChartNote('chartOrdersBottom','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
       showChartNote('chartOrdersBottom','No hay datos para esta gráfica.');
-    }
-
-    const sysData=[]; const xs=[],ys=[];
-    systems.forEach(s=>{
-      const c=sysCount.get(s.id)||0;
-      if(c>0 && s.pos){ sysData.push({x:s.pos.x,y:s.pos.y,r:Math.sqrt(c)*3,count:c,label:s.name}); xs.push(s.pos.x); ys.push(s.pos.y); }
-    });
-    if(sysData.length){ const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys); sysData.forEach(d=>{d.x=(d.x-minX)/(maxX-minX); d.y=(d.y-minY)/(maxY-minY);}); }
-    if(sysData.length){
-      try{
-        charts.heat=new Chart(j('#chartHeat'),{type:'bubble',data:{datasets:[{data:sysData,backgroundColor:'rgba(48,163,255,0.5)',borderColor:accentColor}]} ,options:{scales:{x:{display:false},y:{display:false}},plugins:{legend:{display:false},title:{display:true,text:'Órdenes por sistema (Gráfico de burbujas)'},tooltip:{callbacks:{label:ctx=>`${ctx.raw.label}: ${ctx.raw.count} órdenes`}}}}});
-      }catch(e){ logError(e); showChartNote('chartHeat','No se pudo generar la gráfica con los datos actuales.'); }
-    } else {
-      showChartNote('chartHeat','No hay datos suficientes para esta gráfica.');
     }
 
     const gateData=[]; let maxUnits=0;
