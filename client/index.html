@@ -425,9 +425,10 @@ async function onConstellationChange(){
   }
   const {data:cons}=await throttleEsiCall(()=>get(`${ESI}/universe/constellations/${consId}/`));
   const sysNames=await throttleEsiCall(()=>post(`${ESI}/universe/names/`,cons.systems));
-  systems=sysNames.filter(x=>x.category==="solar_system").map(x=>({id:x.id,name:x.name,pos:{x:0,y:0},gatesWithin:0,gatesOutside:0})).sort((a,b)=>a.name.localeCompare(b.name));
+  systems=sysNames.filter(x=>x.category==="solar_system").map(x=>({id:x.id,name:x.name,pos:{x:0,y:0},gatesSameRegion:0,gatesOtherRegion:0})).sort((a,b)=>a.name.localeCompare(b.name));
   systems.forEach(s=>systemNameMap.set(s.id,s.name));
   const consSystems=new Set(cons.systems);
+  const regionId=+j('#region').value;
   for(const s of systems){
     const {data:sysd}=await throttleEsiCall(()=>get(`${ESI}/universe/systems/${s.id}/`));
     const st=sysd.stations||[];
@@ -439,9 +440,21 @@ async function onConstellationChange(){
       if(!gate){
         try{ const {data:gd}=await throttleEsiCall(()=>get(`${ESI}/universe/stargates/${gId}/`)); gate=gd; setCache(gKey,gate);}catch(e){ logError(e); continue; }
       }
-      if(gate && gate.destination && consSystems.has(gate.destination.system_id)) gw++; else go++;
+      if(gate && gate.destination){
+        const destId=gate.destination.system_id;
+        if(consSystems.has(destId)){
+          gw++;
+        }else{
+          const dKey=`esi.system.${destId}`;
+          let dest=getCache(dKey);
+          if(!dest){
+            try{ const {data:ds}=await throttleEsiCall(()=>get(`${ESI}/universe/systems/${destId}/`)); dest=ds; setCache(dKey,dest);}catch(e){ logError(e); continue; }
+          }
+          if(dest && dest.region_id===regionId) gw++; else go++;
+        }
+      }
     }
-    s.gatesWithin=gw; s.gatesOutside=go;
+    s.gatesSameRegion=gw; s.gatesOtherRegion=go;
     for(const stid of st){ stationsInConstellation.add(stid); stationToSystem.set(stid,s.id);}
   }
   sysSel.innerHTML = `<option value="all">Todos</option>` + systems.map(s=>`<option value="${s.id}">${s.name}</option>`).join("");
@@ -706,13 +719,13 @@ function generateCharts(){
     const gateData=[]; let maxUnits=0;
     systems.forEach(s=>{
       const u=sysUnits.get(s.id)||0;
-      if(u>0){ gateData.push({x:s.gatesWithin||0,y:s.gatesOutside||0,units:u,label:s.name}); if(u>maxUnits) maxUnits=u; }
+      if(u>0){ gateData.push({x:s.gatesSameRegion||0,y:s.gatesOtherRegion||0,units:u,label:s.name}); if(u>maxUnits) maxUnits=u; }
     });
     if(gateData.length){
       const scale=maxUnits?20/Math.sqrt(maxUnits):1;
       gateData.forEach(d=>{d.r=Math.sqrt(d.units)*scale;});
       try{
-        charts.gates=new Chart(j('#chartGates'),{type:'bubble',data:{datasets:[{data:gateData,backgroundColor:'rgba(48,163,255,0.5)',borderColor:accentColor}]},options:{plugins:{legend:{display:false},title:{display:true,text:'Unidades vs stargates por sistema (Gráfico de burbujas)'},tooltip:{callbacks:{label:ctx=>`${ctx.raw.label}: ${fmtBig(ctx.raw.units)} unidades`}}},scales:{x:{title:{display:true,text:'Stargates dentro de constelación'}},y:{title:{display:true,text:'Stargates a otras constelaciones'}}}}});
+        charts.gates=new Chart(j('#chartGates'),{type:'bubble',data:{datasets:[{data:gateData,backgroundColor:'rgba(48,163,255,0.5)',borderColor:accentColor}]},options:{plugins:{legend:{display:false},title:{display:true,text:'Unidades vs stargates por sistema (Gráfico de burbujas)'},tooltip:{callbacks:{label:ctx=>`${ctx.raw.label}: ${fmtBig(ctx.raw.units)} unidades`}}},scales:{x:{title:{display:true,text:'Stargates dentro de región'}},y:{title:{display:true,text:'Stargates a otras regiones'}}}}});
       }catch(e){ logError(e); showChartNote('chartGates','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
       showChartNote('chartGates','No hay datos suficientes para esta gráfica.');
