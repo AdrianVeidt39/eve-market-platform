@@ -368,6 +368,23 @@ async function post(url, body, retries = 3) {
 function sortBy(arr,k,dir=1){ return arr.sort((a,b)=>{const va=a[k],vb=b[k]; if(typeof va==="number"&&typeof vb==="number") return (va-vb)*dir; return (""+va).localeCompare(""+vb)*dir;}); }
 function isoDaysAgo(iso){ return (Date.now()-new Date(iso).getTime())/86400000; }
 
+async function getSystemCached(id){
+  const key=`esi.system.${id}`;
+  let sys=getCache(key);
+  if(sys) return sys;
+  for(let attempt=0; attempt<3; attempt++){
+    try{
+      const {data}=await throttleEsiCall(()=>get(`${ESI}/universe/systems/${id}/`,{},0));
+      setCache(key,data);
+      return data;
+    }catch(e){
+      if(!(e.message.includes('HTTP 420')||e.message.includes('HTTP 429'))||attempt===2) throw e;
+      const delay=500*2**attempt;
+      await sleep(delay);
+    }
+  }
+}
+
 let regions=[],constellations=[],systems=[],stargates=[];
 let stationsInConstellation=new Set();
 let stationToSystem=new Map();
@@ -459,11 +476,10 @@ async function onConstellationChange(){
   systems=sysNames.filter(x=>x.category==="solar_system").map(x=>({id:x.id,name:x.name,pos:{x:0,y:0},gatesSameRegion:0,gatesOtherRegion:0})).sort((a,b)=>a.name.localeCompare(b.name));
   systems.forEach(s=>systemNameMap.set(s.id,s.name));
   renderSystemsTable();
-  const consSystems=new Set(cons.systems);
   const regionId=+j('#region').value;
-  const regionName=regions.find(r=>r.id===regionId)?.name||regionId;
   for(const s of systems){
     const {data:sysd}=await throttleEsiCall(()=>get(`${ESI}/universe/systems/${s.id}/`));
+    setCache(`esi.system.${s.id}`,sysd);
     const st=sysd.stations||[];
     s.pos={x:sysd.position.x,y:sysd.position.y};
     let gw=0,go=0;
@@ -475,23 +491,13 @@ async function onConstellationChange(){
       }
       if(gate && gate.destination){
         const destId=gate.destination.system_id;
-        let destName=systemNameMap.get(destId);
-        let destRegion=regionName;
-        if(consSystems.has(destId)){
-          gw++;
-        }else{
-          const dKey=`esi.system.${destId}`;
-          let dest=getCache(dKey);
-          if(!dest){
-            try{ const {data:ds}=await throttleEsiCall(()=>get(`${ESI}/universe/systems/${destId}/`)); dest=ds; setCache(dKey,dest);}catch(e){ logError(e); continue; }
-          }
-          if(dest){
-            destRegion=regions.find(r=>r.id===dest.region_id)?.name||dest.region_id;
-            if(dest.region_id===regionId) gw++; else go++;
-            destName=dest.name||destName;
-          }
-        }
-        stargates.push({sourceSystem:s.name, gateName:gate.name||gId, destSystem:destName||destId, destRegion});
+        let dest;
+        try{ dest=await getSystemCached(destId); }
+        catch(e){ logError(e); continue; }
+        const destRegion=regions.find(r=>r.id===dest.region_id)?.name||dest.region_id;
+        if(dest.region_id===regionId) gw++; else go++;
+        const destName=dest.name||destId;
+        stargates.push({sourceSystem:s.name, gateName:gate.name||gId, destSystem:destName, destRegion});
       }
     }
     s.gatesSameRegion=gw; s.gatesOtherRegion=go;
