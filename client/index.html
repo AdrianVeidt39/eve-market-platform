@@ -427,7 +427,11 @@ async function onConstellationChange(){
   const cacheKey=`esi.systems.${consId}`;
   const cached=getCache(cacheKey);
   const sysSel=j('#fSystem');
-  if(cached && cached.systems && cached.systems[0] && cached.systems[0].pos){
+  if(cached &&
+     cached.systems &&
+     cached.systems[0] &&
+     cached.systems[0].pos &&
+     cached.systems.every(s=>typeof s.gatesSameRegion==="number" && typeof s.gatesOtherRegion==="number")){
     systems=cached.systems;
     stationToSystem=new Map(cached.stationMap);
     stationsInConstellation=new Set(cached.stationMap.map(p=>p[0]));
