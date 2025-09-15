@@ -92,19 +92,6 @@
           <p id="chartVolNote" class="note" style="display:none"></p>
         </div>
       </div>
-      <div id="topPriceTableWrap" class="table-wrap" style="display:none;margin:16px 0">
-        <table id="topPriceTable">
-          <caption>Top 10 ítems por precio (Tabla)</caption>
-          <thead>
-            <tr>
-              <th>Artículo</th>
-              <th>Precio promedio (ISK)</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-      <p id="topPriceTableNote" class="note" style="display:none"></p>
       <div class="row" style="grid-template-columns:1fr">
         <div>
           <canvas id="chartValBottom"></canvas>
@@ -616,26 +603,6 @@ function getFilteredRows(){ let rows=ordersRaw.map(mapOrder); const f=currentFil
 function render(){ const tbody=j('#ordersTable tbody'); const rows=getFilteredRows(); j('#ordersCount').textContent=fmtInt(rows.length); if(!ordersRaw.length) j('#pagesInfo').textContent='0 / 0 páginas'; const disable=rows.length===0; j('#exportBtn').disabled=disable; j('#chartsBtn').disabled=disable; tbody.innerHTML=rows.map(r=>`<tr><td>${escapeHtml(r.type_name)}</td><td>${r.order_type==='sell'?'Venta':'Compra'}</td><td>${fmtPrice(r.price)}</td><td>${fmtInt(r.volume_remain)}</td><td>${fmtInt(r.min_volume)}</td><td>${r.range}</td><td>${escapeHtml(r.system_name)}</td><td>${escapeHtml(r.station_name)}</td><td><span class="muted" title="${r.issued}">${new Date(r.issued).toLocaleString("es-MX")}</span></td><td>${r.duration}</td></tr>`).join(''); updateStargateBubble(rows); }
 function renderSystemsTable(){ const wrap=j('#systemsTableWrap'); const body=j('#systemsTable tbody'); if(!wrap||!body) return; if(systems.length){ body.innerHTML=systems.map(s=>`<tr><td>${escapeHtml(s.name)}</td><td>${s.id}</td><td>${fmtInt(s.totalStargates||0)}</td><td>${fmtInt(s.gatesOtherRegion||0)}</td><td>${fmtInt(s.otherConstellationGates||0)}</td></tr>`).join(''); wrap.style.display='block'; }else{ wrap.style.display='none'; }}
 function renderStargatesTable(){ const wrap=j('#stargatesTableWrap'); const body=j('#stargatesTable tbody'); if(!wrap||!body) return; if(stargates.length){ body.innerHTML=stargates.map(g=>`<tr><td>${g.sourceSystem}</td><td>${g.gateName}</td><td>${g.id||''}</td><td>${g.destSystem}</td><td>${g.destConstellation}</td><td>${g.destRegion}</td></tr>`).join(''); wrap.style.display='block'; }else{ wrap.style.display='none'; }}
-function renderTopPriceTable(items){
-  const wrap=j('#topPriceTableWrap');
-  const body=j('#topPriceTable tbody');
-  const note=j('#topPriceTableNote');
-  if(!wrap||!body||!note) return;
-  if(!items.length){
-    body.innerHTML='';
-    wrap.style.display='none';
-    note.textContent='No hay datos para la tabla de top 10 por precio.';
-    note.style.display='block';
-    return;
-  }
-  const sorted=[...items];
-  sorted.sort((a,b)=>a.name.localeCompare(b.name,'es',{sensitivity:'base'}));
-  sorted.sort((a,b)=>a.price-b.price);
-  body.innerHTML=sorted.map(item=>`<tr><td>${escapeHtml(item.name)}</td><td>${fmtPrice(item.price)}</td></tr>`).join('');
-  wrap.style.display='block';
-  note.textContent='Ordenado por precio promedio ascendente (empates resueltos por nombre).';
-  note.style.display='block';
-}
 function computeDestinationCounts(){
   const nameToId=new Map(systems.map(s=>[s.name,s.id]));
   const counts=new Map();
@@ -872,7 +839,6 @@ function generateCharts(){
     }).filter(Boolean);
     const topPrice=[...avgPriceArr].sort((a,b)=>b[1]-a[1]).slice(0,10);
     const bottomPrice=avgPriceArr.filter(([,v])=>v>0).sort((a,b)=>a[1]-b[1]).slice(0,10);
-    renderTopPriceTable(topPrice.map(([name,avg])=>({name,price:avg})));
     if(topPrice.length){
       try{
         const el=j('#chartVal');
