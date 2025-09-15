@@ -137,6 +137,10 @@
         <tbody></tbody>
       </table>
     </div>
+    <div id="stargateBubbleWrap" style="display:none;margin-bottom:16px">
+      <canvas id="chartStargateBubble" style="height:360px"></canvas>
+    </div>
+    <p id="chartStargateBubbleNote" class="note" style="display:none"></p>
     <canvas id="chartScatter"></canvas>
     <p id="chartScatterNote" class="note" style="display:none"></p>
     <canvas id="chartAge"></canvas>
@@ -257,6 +261,7 @@ const palette = ['#30a3ff','#00d1b2','#ff6b6b','#ffc107','#9b59b6','#e67e22','#2
 const styles = getComputedStyle(document.documentElement);
 const accentColor = styles.getPropertyValue('--accent') || '#30a3ff';
 const accent2Color = styles.getPropertyValue('--accent2') || '#00d1b2';
+const mutedColor = (styles.getPropertyValue('--muted') || '#8aa0b3').trim() || '#8aa0b3';
 
 Chart.defaults.color = '#fff';
 
@@ -390,6 +395,7 @@ let ordersRaw=[];
 let nameCache=new Map();
 let currentSort={k:"type_name",dir:1};
 let charts={};
+let stargateBubbleChart=null;
 const chartIds=['chartVol','chartVolBottom','chartVal','chartValBottom','chartOrders','chartOrdersBottom','chartScatter','chartAge'];
 
 function showChartNote(id,msg){
@@ -447,6 +453,8 @@ async function onRegionChange(){
 async function onConstellationChange(){
   j('#queryBtn').disabled=true;
   systems=[]; stargates=[]; stationsInConstellation=new Set(); stationToSystem=new Map(); systemNameMap=new Map();
+  ordersRaw=[];
+  render();
   const consId=+j('#constellation').value;
   const cacheKey=`esi.systems.${consId}`;
   const cached=getCache(cacheKey);
@@ -463,9 +471,11 @@ async function onConstellationChange(){
     stationToSystem=new Map(cached.stationMap);
     stationsInConstellation=new Set(cached.stationMap.map(p=>p[0]));
     systemNameMap=new Map(systems.map(s=>[s.id,s.name]));
+    computeDestinationCounts();
     sysSel.innerHTML = `<option value="all">Todos</option>` + systems.map(s=>`<option value="${s.id}">${s.name}</option>`).join("");
     renderSystemsTable();
     renderStargatesTable();
+    updateStargateBubble(getFilteredRows());
     j('#queryBtn').disabled=false;
     return;
   }
@@ -484,6 +494,8 @@ async function onConstellationChange(){
     const gateIds=sysd.stargates||[];
     s.totalStargates=gateIds.length;
     let otherConstellationGates=0;
+    const destConstSet=new Set();
+    const destRegionSet=new Set();
     for(const gId of gateIds){
       const gKey=`esi.stargate.${gId}`;
       let gate=getCache(gKey);
@@ -501,17 +513,23 @@ async function onConstellationChange(){
         const destRegion=regions.find(r=>r.id===cons.region_id)?.name||cons.region_id;
         if(cons.region_id===regionId) gw++; else go++;
         if(dest.constellation_id!==consId) otherConstellationGates++;
+        destConstSet.add(dest.constellation_id);
+        destRegionSet.add(cons.region_id);
         const destName=dest.name||destId;
         const destConstName=cons.name||dest.constellation_id;
         const destGateId=gate.destination?.stargate_id || gId;
-        stargates.push({sourceSystem:s.name, gateName:gate.name||gId, id:destGateId, destSystem:destName, destConstellation:destConstName, destRegion});
+        stargates.push({sourceSystemId:s.id, sourceSystem:s.name, gateName:gate.name||gId, id:destGateId, destSystem:destName, destConstellation:destConstName, destConstellationId:dest.constellation_id, destRegion, destRegionId:cons.region_id});
       }
     }
     s.gatesSameRegion=gw; s.gatesOtherRegion=go; s.otherConstellationGates=otherConstellationGates;
+    s.distinctDestConstellations=destConstSet.size;
+    s.distinctDestRegions=destRegionSet.size;
     for(const stid of st){ stationsInConstellation.add(stid); stationToSystem.set(stid,s.id);}
   }
   renderSystemsTable();
   renderStargatesTable();
+  computeDestinationCounts();
+  updateStargateBubble(getFilteredRows());
   sysSel.innerHTML = `<option value="all">Todos</option>` + systems.map(s=>`<option value="${s.id}">${s.name}</option>`).join("");
   j('#queryBtn').disabled=false;
   setCache(cacheKey,{systems,stationMap:[...stationToSystem.entries()],stargates});
@@ -540,9 +558,110 @@ function currentFilters(){ return { type:j('#fType').value.trim().toLowerCase(),
 function mapOrder(o){ const sysId=stationToSystem.get(o.location_id); return { type_id:o.type_id, type_name:nameCache.get(o.type_id)||o.type_id, order_type:o.is_buy_order?'buy':'sell', price:o.price, volume_remain:o.volume_remain, min_volume:o.min_volume, range:o.range, station_id:o.location_id, station_name:nameCache.get(o.location_id)||o.location_id, system_id:sysId, system_name:systemNameMap.get(sysId)||sysId, issued:o.issued, duration:o.duration }; }
 function applyFilters(rows,f){ return rows.filter(r=>{ if(f.type&&!(""+r.type_name).toLowerCase().includes(f.type))return false; if(f.side!=='all'&&r.order_type!==f.side)return false; if(!Number.isNaN(f.pmin)&&r.price<f.pmin)return false; if(!Number.isNaN(f.pmax)&&r.price>f.pmax)return false; if(!Number.isNaN(f.vmin)&&r.volume_remain<f.vmin)return false; if(!Number.isNaN(f.vmax)&&r.volume_remain>f.vmax)return false; if(!Number.isNaN(f.mmin)&&r.min_volume<f.mmin)return false; if(!Number.isNaN(f.mmax)&&r.min_volume>f.mmax)return false; if(f.range!=='all'&&(""+r.range)!==f.range)return false; if(f.system!=='all'&&(""+r.system_id)!==f.system)return false; if(f.station!=='all'&&(""+r.station_id)!==f.station)return false; if(f.issued!=='all'){ const d=isoDaysAgo(r.issued); if(f.issued==='24h'&&d>1)return false; if(f.issued==='7d'&&d>7)return false; if(f.issued==='30d'&&d>30)return false;} if(f.duration!=='all'&&(""+r.duration)!==(f.duration))return false; return true; }); }
 function getFilteredRows(){ let rows=ordersRaw.map(mapOrder); const f=currentFilters(); rows=applyFilters(rows,f); return sortBy(rows,currentSort.k,currentSort.dir); }
-function render(){ const tbody=j('#ordersTable tbody'); const rows=getFilteredRows(); j('#ordersCount').textContent=fmtInt(rows.length); if(!ordersRaw.length) j('#pagesInfo').textContent='0 / 0 páginas'; const disable=rows.length===0; j('#exportBtn').disabled=disable; j('#chartsBtn').disabled=disable; tbody.innerHTML=rows.map(r=>`<tr><td>${escapeHtml(r.type_name)}</td><td>${r.order_type==='sell'?'Venta':'Compra'}</td><td>${fmtPrice(r.price)}</td><td>${fmtInt(r.volume_remain)}</td><td>${fmtInt(r.min_volume)}</td><td>${r.range}</td><td>${escapeHtml(r.system_name)}</td><td>${escapeHtml(r.station_name)}</td><td><span class="muted" title="${r.issued}">${new Date(r.issued).toLocaleString("es-MX")}</span></td><td>${r.duration}</td></tr>`).join(''); }
+function render(){ const tbody=j('#ordersTable tbody'); const rows=getFilteredRows(); j('#ordersCount').textContent=fmtInt(rows.length); if(!ordersRaw.length) j('#pagesInfo').textContent='0 / 0 páginas'; const disable=rows.length===0; j('#exportBtn').disabled=disable; j('#chartsBtn').disabled=disable; tbody.innerHTML=rows.map(r=>`<tr><td>${escapeHtml(r.type_name)}</td><td>${r.order_type==='sell'?'Venta':'Compra'}</td><td>${fmtPrice(r.price)}</td><td>${fmtInt(r.volume_remain)}</td><td>${fmtInt(r.min_volume)}</td><td>${r.range}</td><td>${escapeHtml(r.system_name)}</td><td>${escapeHtml(r.station_name)}</td><td><span class="muted" title="${r.issued}">${new Date(r.issued).toLocaleString("es-MX")}</span></td><td>${r.duration}</td></tr>`).join(''); updateStargateBubble(rows); }
 function renderSystemsTable(){ const wrap=j('#systemsTableWrap'); const body=j('#systemsTable tbody'); if(!wrap||!body) return; if(systems.length){ body.innerHTML=systems.map(s=>`<tr><td>${escapeHtml(s.name)}</td><td>${s.id}</td><td>${fmtInt(s.totalStargates||0)}</td><td>${fmtInt(s.gatesOtherRegion||0)}</td><td>${fmtInt(s.otherConstellationGates||0)}</td></tr>`).join(''); wrap.style.display='block'; }else{ wrap.style.display='none'; }}
 function renderStargatesTable(){ const wrap=j('#stargatesTableWrap'); const body=j('#stargatesTable tbody'); if(!wrap||!body) return; if(stargates.length){ body.innerHTML=stargates.map(g=>`<tr><td>${g.sourceSystem}</td><td>${g.gateName}</td><td>${g.id||''}</td><td>${g.destSystem}</td><td>${g.destConstellation}</td><td>${g.destRegion}</td></tr>`).join(''); wrap.style.display='block'; }else{ wrap.style.display='none'; }}
+function computeDestinationCounts(){
+  const nameToId=new Map(systems.map(s=>[s.name,s.id]));
+  const counts=new Map();
+  systems.forEach(s=>counts.set(s.id,{consts:new Set(),regions:new Set()}));
+  for(const gate of stargates){
+    let sysId=gate.sourceSystemId;
+    if(typeof sysId!=='number') sysId=nameToId.get(gate.sourceSystem);
+    if(sysId===undefined) continue;
+    if(!counts.has(sysId)) counts.set(sysId,{consts:new Set(),regions:new Set()});
+    const entry=counts.get(sysId);
+    const constKey=gate.destConstellationId ?? gate.destConstellation;
+    const regionKey=gate.destRegionId ?? gate.destRegion;
+    if(constKey!==undefined && constKey!==null) entry.consts.add(constKey);
+    if(regionKey!==undefined && regionKey!==null) entry.regions.add(regionKey);
+  }
+  for(const s of systems){
+    const entry=counts.get(s.id);
+    s.distinctDestConstellations=entry?entry.consts.size:0;
+    s.distinctDestRegions=entry?entry.regions.size:0;
+  }
+}
+function bubbleRadiusFromConstellations(count){
+  if(!count) return 0;
+  return Math.sqrt(count)*9;
+}
+function colorForRegionCount(count){
+  if(!count) return mutedColor;
+  const idx=(count-1)%palette.length;
+  return palette[idx];
+}
+function updateStargateBubble(rows=[]){
+  const wrap=j('#stargateBubbleWrap');
+  const canvas=j('#chartStargateBubble');
+  const note=j('#chartStargateBubbleNote');
+  if(!wrap||!canvas||!note) return;
+  if(stargateBubbleChart){ stargateBubbleChart.destroy(); stargateBubbleChart=null; }
+  if(!systems.length){
+    wrap.style.display='none';
+    note.style.display='none';
+    note.textContent='';
+    return;
+  }
+  const orderCounts=new Map();
+  for(const r of rows){
+    if(typeof r.system_id==='number') orderCounts.set(r.system_id,(orderCounts.get(r.system_id)||0)+1);
+  }
+  const points=systems.map(s=>{
+    const orders=orderCounts.get(s.id)||0;
+    const totalStargates=s.totalStargates||0;
+    const constCount=s.distinctDestConstellations||0;
+    const regionCount=s.distinctDestRegions||0;
+    return {x:orders,y:totalStargates,r:bubbleRadiusFromConstellations(constCount),system:s.name,orders,constCount,regionCount};
+  });
+  const hasData=points.some(p=>p.x>0||p.y>0||p.constCount>0||p.regionCount>0);
+  if(!hasData){
+    wrap.style.display='none';
+    note.textContent='No hay datos para la gráfica de sistemas y órdenes.';
+    note.style.display='block';
+    return;
+  }
+  wrap.style.display='block';
+  const colors=points.map(p=>colorForRegionCount(p.regionCount));
+  stargateBubbleChart=new Chart(canvas,{
+    type:'bubble',
+    data:{
+      datasets:[{
+        label:'Sistemas',
+        data:points,
+        backgroundColor:colors,
+        borderColor:colors,
+        hoverBackgroundColor:colors
+      }]
+    },
+    options:{
+      maintainAspectRatio:false,
+      scales:{
+        x:{beginAtZero:true,title:{display:true,text:'Órdenes totales'},ticks:{precision:0}},
+        y:{beginAtZero:true,title:{display:true,text:'Stargates totales'},ticks:{precision:0}}
+      },
+      plugins:{
+        legend:{display:false},
+        title:{display:true,text:'Stargates vs órdenes por sistema (Gráfico de burbujas)'},
+        tooltip:{
+          callbacks:{
+            label(context){
+              const raw=context.raw||{};
+              const lines=[raw.system||''];
+              lines.push(`Órdenes: ${fmtInt(raw.orders||0)}`);
+              lines.push(`Stargates: ${fmtInt(raw.y||0)}`);
+              lines.push(`Constelaciones destino: ${fmtInt(raw.constCount||0)}`);
+              lines.push(`Regiones destino: ${fmtInt(raw.regionCount||0)}`);
+              return lines;
+            }
+          }
+        }
+      }
+    }
+  });
+  note.textContent='Área de la burbuja = constelaciones destino distintas. Color = regiones destino distintas.';
+  note.style.display='block';
+}
 function escapeHtml(s){ return (""+s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[m])); }
 function exportCSV(){ let rows=ordersRaw.map(mapOrder); rows=applyFilters(rows,currentFilters()); rows=sortBy(rows,currentSort.k,currentSort.dir); const headers=["type_name","order_type","price","volume_remain","min_volume","range","system_name","station_name","issued","duration"]; const csv=[headers.join(",")].concat(rows.map(r=>[`"${(""+r.type_name).replace(/"/g,'""')}"`,r.order_type,r.price,r.volume_remain,r.min_volume,r.range,`"${(""+r.system_name).replace(/"/g,'""')}"`,`"${(""+r.station_name).replace(/"/g,'""')}"`,r.issued,r.duration].join(","))).join("\n"); const blob=new Blob([csv],{type:"text/csv;charset=utf-8"}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='ordenes_eve.csv'; a.click(); URL.revokeObjectURL(url); }
 
