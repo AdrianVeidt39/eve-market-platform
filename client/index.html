@@ -134,8 +134,6 @@
         <tbody></tbody>
       </table>
     </div>
-    <canvas id="chartGates"></canvas>
-    <p id="chartGatesNote" class="note" style="display:none"></p>
     <canvas id="chartScatter"></canvas>
     <p id="chartScatterNote" class="note" style="display:none"></p>
     <canvas id="chartAge"></canvas>
@@ -258,33 +256,6 @@ const accentColor = styles.getPropertyValue('--accent') || '#30a3ff';
 const accent2Color = styles.getPropertyValue('--accent2') || '#00d1b2';
 
 Chart.defaults.color = '#fff';
-
-const bubbleLabelPlugin = {
-  id:'bubbleLabel',
-  afterDatasetsDraw(chart,args,opts){
-    if(chart.config.type !== 'bubble') return;
-    const {ctx}=chart;
-    ctx.save();
-    chart.data.datasets.forEach((dataset,i)=>{
-      const meta=chart.getDatasetMeta(i);
-      meta.data.forEach((el,idx)=>{
-        const raw=dataset.data[idx];
-        if(!raw) return;
-        const val=raw.count ?? raw.units;
-        const lines=[raw.label, fmtInt(val||0)+' artículos'];
-        ctx.fillStyle=(opts&&opts.color)||'#fff';
-        ctx.font=(opts&&opts.font)||'10px sans-serif';
-        ctx.textAlign='center';
-        ctx.textBaseline='middle';
-        const lh=ctx.measureText('M').width*1.2;
-        lines.forEach((line,i)=>{ ctx.fillText(line, el.x, el.y - (lh*(lines.length-1)/2) + i*lh); });
-      });
-    });
-    ctx.restore();
-  }
-};
-Chart.register(bubbleLabelPlugin);
-Chart.defaults.plugins.bubbleLabel={color:'#fff',font:'10px sans-serif'};
 
 function fitBarHeight(canvas, count, factor=1){
   const minHeight=160*factor;
@@ -416,7 +387,7 @@ let ordersRaw=[];
 let nameCache=new Map();
 let currentSort={k:"type_name",dir:1};
 let charts={};
-const chartIds=['chartVol','chartVolBottom','chartVal','chartValBottom','chartOrders','chartOrdersBottom','chartGates','chartScatter','chartAge'];
+const chartIds=['chartVol','chartVolBottom','chartVal','chartValBottom','chartOrders','chartOrdersBottom','chartScatter','chartAge'];
 
 function showChartNote(id,msg){
   const canvas=j('#'+id);
@@ -792,21 +763,6 @@ function generateCharts(){
       }catch(e){ logError(e); showChartNote('chartOrdersBottom','No se pudo generar la gráfica con los datos actuales.'); }
     } else {
       showChartNote('chartOrdersBottom','No hay datos para esta gráfica.');
-    }
-
-    const gateData=[]; let maxUnits=0;
-    systems.forEach(s=>{
-      const u=sysUnits.get(s.id)||0;
-      if(u>0){ gateData.push({x:s.gatesSameRegion||0,y:s.gatesOtherRegion||0,units:u,label:s.name}); if(u>maxUnits) maxUnits=u; }
-    });
-    if(gateData.length){
-      const scale=maxUnits?20/Math.sqrt(maxUnits):1;
-      gateData.forEach(d=>{d.r=Math.sqrt(d.units)*scale;});
-      try{
-        charts.gates=new Chart(j('#chartGates'),{type:'bubble',data:{datasets:[{data:gateData,backgroundColor:'rgba(48,163,255,0.5)',borderColor:accentColor}]},options:{plugins:{legend:{display:false},title:{display:true,text:'Unidades vs stargates por sistema (Gráfico de burbujas)'},tooltip:{callbacks:{label:ctx=>`${ctx.raw.label}: ${fmtBig(ctx.raw.units)} unidades`}}},scales:{x:{title:{display:true,text:'Stargates dentro de región'}},y:{title:{display:true,text:'Stargates a otras regiones'}}}}});
-      }catch(e){ logError(e); showChartNote('chartGates','No se pudo generar la gráfica con los datos actuales.'); }
-    } else {
-      showChartNote('chartGates','No hay datos suficientes para esta gráfica.');
     }
 
     if(scatterPV.length){
