@@ -440,6 +440,45 @@ let charts={};
 let stargateBubbleChart=null;
 const chartIds=['chartVol','chartVolBottom','chartVal','chartValBottom','chartOrders','chartOrdersBottom','chartScatter','chartAge'];
 
+function removeTopPriceSummaryTables(){
+  if(typeof document==='undefined') return;
+  const tables=document.querySelectorAll('table');
+  tables.forEach(table=>{
+    const captionText=(table.querySelector('caption')?.textContent||'').toLowerCase();
+    const headerTexts=Array.from(table.querySelectorAll('th')).map(th=>th.textContent.trim().toLowerCase());
+    const hasAvgHeader=headerTexts.some(text=>text.includes('precio promedio'));
+    const hasArticleHeader=headerTexts.some(text=>text.includes('artículo'));
+    const hasTargetCaption=captionText.includes('top')&&captionText.includes('precio')&&captionText.includes('tabla');
+    if((hasAvgHeader&&hasArticleHeader)||hasTargetCaption){
+      const wrap=table.closest('.table-wrap');
+      const container=wrap||table;
+      const prev=container.previousElementSibling;
+      const next=container.nextElementSibling;
+      const isRelatedHeading=el=>{
+        if(!el||!el.textContent) return false;
+        const text=el.textContent.toLowerCase();
+        return text.includes('top')&&text.includes('precio');
+      };
+      if(isRelatedHeading(prev)) prev.remove();
+      container.remove();
+      if(isRelatedHeading(next)) next.remove();
+    }
+  });
+}
+
+if(typeof MutationObserver!=='undefined'&&typeof document!=='undefined'&&document.body){
+  const observer=new MutationObserver(mutations=>{
+    const relevant=mutations.some(m=>Array.from(m.addedNodes).some(node=>{
+      const isElement=typeof Element!=='undefined'&&node instanceof Element;
+      if(!isElement) return false;
+      return node.matches('table')||node.querySelector('table');
+    }));
+    if(relevant) removeTopPriceSummaryTables();
+  });
+  observer.observe(document.body,{childList:true,subtree:true});
+  removeTopPriceSummaryTables();
+}
+
 function showChartNote(id,msg){
   const canvas=j('#'+id);
   const note=j('#'+id+'Note');
