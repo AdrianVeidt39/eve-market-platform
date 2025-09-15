@@ -113,6 +113,8 @@
           <tr>
             <th>Sistema</th>
             <th>ID</th>
+            <th>Total de stargates</th>
+            <th>Constelaciones destino distintas al filtro</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -454,7 +456,7 @@ async function onConstellationChange(){
      (cached.stargates.length===0 || cached.stargates[0].destConstellation) &&
      cached.systems[0] &&
      cached.systems[0].pos &&
-     cached.systems.every(s=>typeof s.gatesSameRegion==="number" && typeof s.gatesOtherRegion==="number")){
+     cached.systems.every(s=>typeof s.gatesSameRegion==="number" && typeof s.gatesOtherRegion==="number" && typeof s.totalStargates==="number" && typeof s.otherConstellationGates==="number")){
     systems=cached.systems;
     stargates=cached.stargates;
     stationToSystem=new Map(cached.stationMap);
@@ -468,7 +470,7 @@ async function onConstellationChange(){
   }
   const {data:cons}=await throttleEsiCall(()=>get(`${ESI}/universe/constellations/${consId}/`));
   const sysNames=await throttleEsiCall(()=>post(`${ESI}/universe/names/`,cons.systems));
-  systems=sysNames.filter(x=>x.category==="solar_system").map(x=>({id:x.id,name:x.name,pos:{x:0,y:0},gatesSameRegion:0,gatesOtherRegion:0})).sort((a,b)=>a.name.localeCompare(b.name));
+  systems=sysNames.filter(x=>x.category==="solar_system").map(x=>({id:x.id,name:x.name,pos:{x:0,y:0},gatesSameRegion:0,gatesOtherRegion:0,totalStargates:0,otherConstellationGates:0})).sort((a,b)=>a.name.localeCompare(b.name));
   systems.forEach(s=>systemNameMap.set(s.id,s.name));
   renderSystemsTable();
   const regionId=+j('#region').value;
@@ -478,7 +480,10 @@ async function onConstellationChange(){
     const st=sysd.stations||[];
     s.pos={x:sysd.position.x,y:sysd.position.y};
     let gw=0,go=0;
-    for(const gId of sysd.stargates||[]){
+    const gateIds=sysd.stargates||[];
+    s.totalStargates=gateIds.length;
+    let otherConstellationGates=0;
+    for(const gId of gateIds){
       const gKey=`esi.stargate.${gId}`;
       let gate=getCache(gKey);
       if(!gate){
@@ -494,15 +499,17 @@ async function onConstellationChange(){
         catch(e){ logError(e); continue; }
         const destRegion=regions.find(r=>r.id===cons.region_id)?.name||cons.region_id;
         if(cons.region_id===regionId) gw++; else go++;
+        if(dest.constellation_id!==consId) otherConstellationGates++;
         const destName=dest.name||destId;
         const destConstName=cons.name||dest.constellation_id;
         const destGateId=gate.destination?.stargate_id || gId;
         stargates.push({sourceSystem:s.name, gateName:gate.name||gId, id:destGateId, destSystem:destName, destConstellation:destConstName, destRegion});
       }
     }
-    s.gatesSameRegion=gw; s.gatesOtherRegion=go;
+    s.gatesSameRegion=gw; s.gatesOtherRegion=go; s.otherConstellationGates=otherConstellationGates;
     for(const stid of st){ stationsInConstellation.add(stid); stationToSystem.set(stid,s.id);}
   }
+  renderSystemsTable();
   renderStargatesTable();
   sysSel.innerHTML = `<option value="all">Todos</option>` + systems.map(s=>`<option value="${s.id}">${s.name}</option>`).join("");
   j('#queryBtn').disabled=false;
@@ -533,7 +540,7 @@ function mapOrder(o){ const sysId=stationToSystem.get(o.location_id); return { t
 function applyFilters(rows,f){ return rows.filter(r=>{ if(f.type&&!(""+r.type_name).toLowerCase().includes(f.type))return false; if(f.side!=='all'&&r.order_type!==f.side)return false; if(!Number.isNaN(f.pmin)&&r.price<f.pmin)return false; if(!Number.isNaN(f.pmax)&&r.price>f.pmax)return false; if(!Number.isNaN(f.vmin)&&r.volume_remain<f.vmin)return false; if(!Number.isNaN(f.vmax)&&r.volume_remain>f.vmax)return false; if(!Number.isNaN(f.mmin)&&r.min_volume<f.mmin)return false; if(!Number.isNaN(f.mmax)&&r.min_volume>f.mmax)return false; if(f.range!=='all'&&(""+r.range)!==f.range)return false; if(f.system!=='all'&&(""+r.system_id)!==f.system)return false; if(f.station!=='all'&&(""+r.station_id)!==f.station)return false; if(f.issued!=='all'){ const d=isoDaysAgo(r.issued); if(f.issued==='24h'&&d>1)return false; if(f.issued==='7d'&&d>7)return false; if(f.issued==='30d'&&d>30)return false;} if(f.duration!=='all'&&(""+r.duration)!==(f.duration))return false; return true; }); }
 function getFilteredRows(){ let rows=ordersRaw.map(mapOrder); const f=currentFilters(); rows=applyFilters(rows,f); return sortBy(rows,currentSort.k,currentSort.dir); }
 function render(){ const tbody=j('#ordersTable tbody'); const rows=getFilteredRows(); j('#ordersCount').textContent=fmtInt(rows.length); if(!ordersRaw.length) j('#pagesInfo').textContent='0 / 0 páginas'; const disable=rows.length===0; j('#exportBtn').disabled=disable; j('#chartsBtn').disabled=disable; tbody.innerHTML=rows.map(r=>`<tr><td>${escapeHtml(r.type_name)}</td><td>${r.order_type==='sell'?'Venta':'Compra'}</td><td>${fmtPrice(r.price)}</td><td>${fmtInt(r.volume_remain)}</td><td>${fmtInt(r.min_volume)}</td><td>${r.range}</td><td>${escapeHtml(r.system_name)}</td><td>${escapeHtml(r.station_name)}</td><td><span class="muted" title="${r.issued}">${new Date(r.issued).toLocaleString("es-MX")}</span></td><td>${r.duration}</td></tr>`).join(''); }
-function renderSystemsTable(){ const wrap=j('#systemsTableWrap'); const body=j('#systemsTable tbody'); if(!wrap||!body) return; if(systems.length){ body.innerHTML=systems.map(s=>`<tr><td>${s.name}</td><td>${s.id}</td></tr>`).join(''); wrap.style.display='block'; }else{ wrap.style.display='none'; }}
+function renderSystemsTable(){ const wrap=j('#systemsTableWrap'); const body=j('#systemsTable tbody'); if(!wrap||!body) return; if(systems.length){ body.innerHTML=systems.map(s=>`<tr><td>${escapeHtml(s.name)}</td><td>${s.id}</td><td>${fmtInt(s.totalStargates||0)}</td><td>${fmtInt(s.otherConstellationGates||0)}</td></tr>`).join(''); wrap.style.display='block'; }else{ wrap.style.display='none'; }}
 function renderStargatesTable(){ const wrap=j('#stargatesTableWrap'); const body=j('#stargatesTable tbody'); if(!wrap||!body) return; if(stargates.length){ body.innerHTML=stargates.map(g=>`<tr><td>${g.sourceSystem}</td><td>${g.gateName}</td><td>${g.id||''}</td><td>${g.destSystem}</td><td>${g.destConstellation}</td><td>${g.destRegion}</td></tr>`).join(''); wrap.style.display='block'; }else{ wrap.style.display='none'; }}
 function escapeHtml(s){ return (""+s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[m])); }
 function exportCSV(){ let rows=ordersRaw.map(mapOrder); rows=applyFilters(rows,currentFilters()); rows=sortBy(rows,currentSort.k,currentSort.dir); const headers=["type_name","order_type","price","volume_remain","min_volume","range","system_name","station_name","issued","duration"]; const csv=[headers.join(",")].concat(rows.map(r=>[`"${(""+r.type_name).replace(/"/g,'""')}"`,r.order_type,r.price,r.volume_remain,r.min_volume,r.range,`"${(""+r.system_name).replace(/"/g,'""')}"`,`"${(""+r.station_name).replace(/"/g,'""')}"`,r.issued,r.duration].join(","))).join("\n"); const blob=new Blob([csv],{type:"text/csv;charset=utf-8"}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='ordenes_eve.csv'; a.click(); URL.revokeObjectURL(url); }
