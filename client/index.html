@@ -263,6 +263,48 @@ const accentColor = styles.getPropertyValue('--accent') || '#30a3ff';
 const accent2Color = styles.getPropertyValue('--accent2') || '#00d1b2';
 const mutedColor = (styles.getPropertyValue('--muted') || '#8aa0b3').trim() || '#8aa0b3';
 
+const bubbleLabelPlugin = {
+  id:'bubbleLabelPlugin',
+  afterDatasetsDraw(chart, args, pluginOptions){
+    const dataset=chart.data.datasets?.[0];
+    if(!dataset) return;
+    const meta=chart.getDatasetMeta(0);
+    if(!meta) return;
+    const ctx=chart.ctx;
+    const opts=pluginOptions||{};
+    const defaultFont=Chart.defaults.font||{};
+    const fontSize=opts.fontSize||defaultFont.size||12;
+    const fontFamily=opts.fontFamily||defaultFont.family||'sans-serif';
+    const fontWeight=opts.fontWeight||defaultFont.weight||'600';
+    const lineHeight=opts.lineHeight||fontSize*1.2;
+    const color=opts.color||'#fff';
+    const yOffset=opts.yOffset??8;
+    const bestNote=opts.bestNote||'Sistema mejor conectado';
+    ctx.save();
+    ctx.font=`${fontWeight} ${fontSize}px ${fontFamily}`;
+    ctx.fillStyle=color;
+    ctx.textAlign='center';
+    ctx.textBaseline='bottom';
+    meta.data.forEach((element,index)=>{
+      if(!element||element.skip) return;
+      const raw=dataset.data?.[index];
+      if(!raw) return;
+      let text=raw.system?String(raw.system):'';
+      if(!text) return;
+      if(raw.bestConnected) text+=`\n${bestNote}`;
+      const lines=text.split('\n').filter(Boolean);
+      if(!lines.length) return;
+      const pos=element.tooltipPosition();
+      let currentY=pos.y - yOffset - (lines.length-1)*lineHeight;
+      for(const line of lines){
+        ctx.fillText(line,pos.x,currentY);
+        currentY+=lineHeight;
+      }
+    });
+    ctx.restore();
+  }
+};
+
 Chart.defaults.color = '#fff';
 
 function fitBarHeight(canvas, count, factor=1){
@@ -614,6 +656,12 @@ function updateStargateBubble(rows=[]){
     const regionCount=s.distinctDestRegions||0;
     return {x:orders,y:totalStargates,r:bubbleRadiusFromConstellations(constCount),system:s.name,orders,constCount,regionCount};
   });
+  const maxConst=points.reduce((max,p)=>Math.max(max,p.constCount||0),0);
+  const maxRegion=points.reduce((max,p)=>Math.max(max,p.regionCount||0),0);
+  const maxStargates=points.reduce((max,p)=>Math.max(max,p.y||0),0);
+  points.forEach(p=>{
+    p.bestConnected=p.constCount>0 && p.regionCount>0 && p.constCount===maxConst && p.regionCount===maxRegion;
+  });
   const hasData=points.some(p=>p.x>0||p.y>0||p.constCount>0||p.regionCount>0);
   if(!hasData){
     wrap.style.display='none';
@@ -623,6 +671,12 @@ function updateStargateBubble(rows=[]){
   }
   wrap.style.display='block';
   const colors=points.map(p=>colorForRegionCount(p.regionCount));
+  const yScale={beginAtZero:true,title:{display:true,text:'Stargates totales'},ticks:{precision:0}};
+  const yRightScale={beginAtZero:true,position:'right',title:{display:true,text:'Stargates totales'},ticks:{precision:0},grid:{drawOnChartArea:false},display:true,alignTo:'y'};
+  if(maxStargates>0){
+    yScale.suggestedMax=maxStargates;
+    yRightScale.suggestedMax=maxStargates;
+  }
   stargateBubbleChart=new Chart(canvas,{
     type:'bubble',
     data:{
@@ -631,18 +685,29 @@ function updateStargateBubble(rows=[]){
         data:points,
         backgroundColor:colors,
         borderColor:colors,
-        hoverBackgroundColor:colors
+        hoverBackgroundColor:colors,
+        yAxisID:'y'
       }]
     },
+    plugins:[bubbleLabelPlugin],
     options:{
       maintainAspectRatio:false,
       scales:{
         x:{beginAtZero:true,title:{display:true,text:'Órdenes totales'},ticks:{precision:0}},
-        y:{beginAtZero:true,title:{display:true,text:'Stargates totales'},ticks:{precision:0}}
+        y:yScale,
+        yRight:yRightScale
       },
       plugins:{
         legend:{display:false},
         title:{display:true,text:'Stargates vs órdenes por sistema (Gráfico de burbujas)'},
+        bubbleLabelPlugin:{
+          fontSize:11,
+          fontWeight:'600',
+          color:'#fff',
+          yOffset:10,
+          lineHeight:14,
+          bestNote:'Sistema mejor conectado'
+        },
         tooltip:{
           callbacks:{
             label(context){
@@ -659,7 +724,7 @@ function updateStargateBubble(rows=[]){
       }
     }
   });
-  note.textContent='Área de la burbuja = constelaciones destino distintas. Color = regiones destino distintas.';
+  note.textContent='Área de la burbuja = constelaciones destino distintas. Color = regiones destino distintas. Las etiquetas muestran el nombre del sistema y resaltan "Sistema mejor conectado" en los más conectados.';
   note.style.display='block';
 }
 function escapeHtml(s){ return (""+s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[m])); }
