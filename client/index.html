@@ -127,6 +127,7 @@
             <th>Stargate</th>
             <th>ID del Stargate destino</th>
             <th>Sistema destino</th>
+            <th>Constelación destino</th>
             <th>Región destino</th>
           </tr>
         </thead>
@@ -390,6 +391,23 @@ async function getSystemCached(id){
   }
 }
 
+async function getConstellationCached(id){
+  const key=`esi.constellation.${id}`;
+  let cons=getCache(key);
+  if(cons) return cons;
+  for(let attempt=0; attempt<3; attempt++){
+    try{
+      const {data}=await throttleEsiCall(()=>get(`${ESI}/universe/constellations/${id}/`,{},0));
+      setCache(key,data);
+      return data;
+    }catch(e){
+      if(!(e.message.includes('HTTP 420')||e.message.includes('HTTP 429'))||attempt===2) throw e;
+      const delay=500*2**attempt;
+      await sleep(delay);
+    }
+  }
+}
+
 let regions=[],constellations=[],systems=[],stargates=[];
 let stationsInConstellation=new Set();
 let stationToSystem=new Map();
@@ -462,6 +480,7 @@ async function onConstellationChange(){
   if(cached &&
      cached.systems &&
      cached.stargates &&
+     (cached.stargates.length===0 || cached.stargates[0].destConstellation) &&
      cached.systems[0] &&
      cached.systems[0].pos &&
      cached.systems.every(s=>typeof s.gatesSameRegion==="number" && typeof s.gatesOtherRegion==="number")){
@@ -499,11 +518,15 @@ async function onConstellationChange(){
         let dest;
         try{ dest=await getSystemCached(destId); }
         catch(e){ logError(e); continue; }
-        const destRegion=regions.find(r=>r.id===dest.region_id)?.name||dest.region_id;
-        if(dest.region_id===regionId) gw++; else go++;
+        let cons;
+        try{ cons=await getConstellationCached(dest.constellation_id); }
+        catch(e){ logError(e); continue; }
+        const destRegion=regions.find(r=>r.id===cons.region_id)?.name||cons.region_id;
+        if(cons.region_id===regionId) gw++; else go++;
         const destName=dest.name||destId;
+        const destConstName=cons.name||dest.constellation_id;
         const destGateId=gate.destination?.stargate_id || gId;
-        stargates.push({sourceSystem:s.name, gateName:gate.name||gId, id:destGateId, destSystem:destName, destRegion});
+        stargates.push({sourceSystem:s.name, gateName:gate.name||gId, id:destGateId, destSystem:destName, destConstellation:destConstName, destRegion});
       }
     }
     s.gatesSameRegion=gw; s.gatesOtherRegion=go;
@@ -540,7 +563,7 @@ function applyFilters(rows,f){ return rows.filter(r=>{ if(f.type&&!(""+r.type_na
 function getFilteredRows(){ let rows=ordersRaw.map(mapOrder); const f=currentFilters(); rows=applyFilters(rows,f); return sortBy(rows,currentSort.k,currentSort.dir); }
 function render(){ const tbody=j('#ordersTable tbody'); const rows=getFilteredRows(); j('#ordersCount').textContent=fmtInt(rows.length); if(!ordersRaw.length) j('#pagesInfo').textContent='0 / 0 páginas'; const disable=rows.length===0; j('#exportBtn').disabled=disable; j('#chartsBtn').disabled=disable; tbody.innerHTML=rows.map(r=>`<tr><td>${escapeHtml(r.type_name)}</td><td>${r.order_type==='sell'?'Venta':'Compra'}</td><td>${fmtPrice(r.price)}</td><td>${fmtInt(r.volume_remain)}</td><td>${fmtInt(r.min_volume)}</td><td>${r.range}</td><td>${escapeHtml(r.system_name)}</td><td>${escapeHtml(r.station_name)}</td><td><span class="muted" title="${r.issued}">${new Date(r.issued).toLocaleString("es-MX")}</span></td><td>${r.duration}</td></tr>`).join(''); }
 function renderSystemsTable(){ const wrap=j('#systemsTableWrap'); const body=j('#systemsTable tbody'); if(!wrap||!body) return; if(systems.length){ body.innerHTML=systems.map(s=>`<tr><td>${s.name}</td><td>${s.id}</td></tr>`).join(''); wrap.style.display='block'; }else{ wrap.style.display='none'; }}
-function renderStargatesTable(){ const wrap=j('#stargatesTableWrap'); const body=j('#stargatesTable tbody'); if(!wrap||!body) return; if(stargates.length){ body.innerHTML=stargates.map(g=>`<tr><td>${g.sourceSystem}</td><td>${g.gateName}</td><td>${g.id||''}</td><td>${g.destSystem}</td><td>${g.destRegion}</td></tr>`).join(''); wrap.style.display='block'; }else{ wrap.style.display='none'; }}
+function renderStargatesTable(){ const wrap=j('#stargatesTableWrap'); const body=j('#stargatesTable tbody'); if(!wrap||!body) return; if(stargates.length){ body.innerHTML=stargates.map(g=>`<tr><td>${g.sourceSystem}</td><td>${g.gateName}</td><td>${g.id||''}</td><td>${g.destSystem}</td><td>${g.destConstellation}</td><td>${g.destRegion}</td></tr>`).join(''); wrap.style.display='block'; }else{ wrap.style.display='none'; }}
 function escapeHtml(s){ return (""+s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[m])); }
 function exportCSV(){ let rows=ordersRaw.map(mapOrder); rows=applyFilters(rows,currentFilters()); rows=sortBy(rows,currentSort.k,currentSort.dir); const headers=["type_name","order_type","price","volume_remain","min_volume","range","system_name","station_name","issued","duration"]; const csv=[headers.join(",")].concat(rows.map(r=>[`"${(""+r.type_name).replace(/"/g,'""')}"`,r.order_type,r.price,r.volume_remain,r.min_volume,r.range,`"${(""+r.system_name).replace(/"/g,'""')}"`,`"${(""+r.station_name).replace(/"/g,'""')}"`,r.issued,r.duration].join(","))).join("\n"); const blob=new Blob([csv],{type:"text/csv;charset=utf-8"}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='ordenes_eve.csv'; a.click(); URL.revokeObjectURL(url); }
 
