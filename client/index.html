@@ -155,6 +155,9 @@
           <tbody></tbody>
         </table>
       </div>
+      <div id="priceBoxChartWrap" style="display:none;margin:16px 0;border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--panel)">
+        <canvas id="chartPriceBoxMetrics" style="width:100%;height:360px"></canvas>
+      </div>
       <div id="ordersBoxWrap" class="table-wrap">
         <table id="ordersBoxTable" class="table-small">
           <caption>Resumen box plot · Top 10 por órdenes (por artículo)</caption>
@@ -290,6 +293,9 @@ const styles = getComputedStyle(document.documentElement);
 const accentColor = styles.getPropertyValue('--accent') || '#30a3ff';
 const accent2Color = styles.getPropertyValue('--accent2') || '#00d1b2';
 const mutedColor = (styles.getPropertyValue('--muted') || '#8aa0b3').trim() || '#8aa0b3';
+const textColor = (styles.getPropertyValue('--text') || '#e6eef7').trim() || '#e6eef7';
+const borderColorVar = (styles.getPropertyValue('--border') || '#223247').trim() || '#223247';
+const axisGridColor = borderColorVar.startsWith('#') ? `${borderColorVar}66` : 'rgba(34,50,71,0.4)';
 
 const bubbleLabelPlugin = {
   id:'bubbleLabelPlugin',
@@ -466,6 +472,7 @@ let nameCache=new Map();
 let currentSort={k:"type_name",dir:1};
 let charts={};
 let stargateBubbleChart=null;
+let priceBoxMetricsChart=null;
 const chartIds=['chartVol','chartVolBottom','chartVal','chartValBottom','chartOrders','chartOrdersBottom','chartScatter','chartAge'];
 
 function removeTopPriceSummaryTables(){
@@ -700,7 +707,95 @@ function colorForRegionCount(count){
   const idx=(count-1)%palette.length;
   return palette[idx];
 }
-function computeQuantile(sorted,q){
+  function updatePriceBoxChart(enriched=[],metrics=[]){
+    const wrap=j('#priceBoxChartWrap');
+    const canvas=j('#chartPriceBoxMetrics');
+    if(!wrap||!canvas) return;
+    if(priceBoxMetricsChart){ priceBoxMetricsChart.destroy(); priceBoxMetricsChart=null; }
+    if(!enriched.length){
+      wrap.style.display='none';
+      return;
+    }
+    const chartMetrics=(metrics||[]).filter(metric=>metric&&metric.chart!==false);
+    if(!chartMetrics.length){
+      wrap.style.display='none';
+      return;
+    }
+    const categories=enriched.map(detail=>detail.name);
+    const datasets=[];
+    chartMetrics.forEach((metric,index)=>{
+      const points=enriched.map(detail=>{
+        const raw=metric.getValue(detail.stats);
+        if(!Number.isFinite(raw)) return null;
+        return {
+          x:raw,
+          y:detail.name,
+          article:detail.name,
+          rawValue:raw,
+          stats:detail.stats
+        };
+      }).filter(Boolean);
+      if(!points.length) return;
+      const color=palette[index%palette.length];
+      datasets.push({
+        label:metric.label,
+        data:points,
+        borderColor:color,
+        backgroundColor:color,
+        pointRadius:4,
+        pointHoverRadius:6,
+        metricFormat:metric.format
+      });
+    });
+    if(!datasets.length){
+      wrap.style.display='none';
+      return;
+    }
+    wrap.style.display='block';
+    priceBoxMetricsChart=new Chart(canvas,{
+      type:'scatter',
+      data:{datasets},
+      options:{
+        parsing:false,
+        responsive:true,
+        maintainAspectRatio:false,
+        plugins:{
+          legend:{position:'bottom',labels:{color:textColor}},
+          tooltip:{
+            callbacks:{
+              title(items){
+                const item=items&&items[0];
+                return item?.raw?.article||'';
+              },
+              label(ctx){
+                const dataset=ctx.dataset||{};
+                const format=typeof dataset.metricFormat==='function'?dataset.metricFormat:value=>String(value);
+                const rawValue=ctx.raw?.rawValue;
+                const value=Number.isFinite(rawValue)?format(rawValue,ctx.raw?.stats):'—';
+                return `${dataset.label}: ${value}`;
+              }
+            }
+          }
+        },
+        scales:{
+          x:{
+            title:{display:true,text:'Valor de la métrica',color:textColor},
+            ticks:{color:textColor},
+            grid:{color:axisGridColor}
+          },
+          y:{
+            type:'category',
+            labels:categories,
+            title:{display:true,text:'Artículo',color:textColor},
+            ticks:{color:textColor},
+            grid:{color:axisGridColor},
+            offset:true
+          }
+        }
+      }
+    });
+  }
+  function computeQuantile(sorted,q){
   if(!sorted.length) return NaN;
   const pos=(sorted.length-1)*q;
   const base=Math.floor(pos);
@@ -736,7 +831,7 @@ function updateBoxPlotTables(priceDetails=[],orderDetails=[]){
   const renderTable=(table,wrap,details,formatter)=>{
     const thead=table.querySelector('thead');
     const tbody=table.querySelector('tbody');
-    if(!thead||!tbody) return false;
+    if(!thead||!tbody) return {visible:false,enriched:[],metrics:[]};
     const enriched=details.map(detail=>{
       const stats=computeBoxPlotStats(detail?.values||[]);
       if(!stats) return null;
@@ -746,34 +841,43 @@ function updateBoxPlotTables(priceDetails=[],orderDetails=[]){
       thead.innerHTML='<tr><th>Métrica</th><th>Valor</th></tr>';
       tbody.innerHTML='';
       wrap.style.display='none';
-      return false;
+      return {visible:false,enriched:[],metrics:[]};
     }
     const headers=['<th>Métrica</th>'].concat(enriched.map(detail=>`<th>${escapeHtml(detail.name)}</th>`));
     thead.innerHTML=`<tr>${headers.join('')}</tr>`;
-    const formatValue=val=>Number.isFinite(val)?formatter(val):'—';
     const metrics=[
-      {label:'Cantidad de valores',value:stats=>fmtInt(stats.count)},
-      {label:'Mínimo',value:stats=>formatValue(stats.min)},
-      {label:'Q1 (25%)',value:stats=>formatValue(stats.q1)},
-      {label:'Mediana (50%)',value:stats=>formatValue(stats.median)},
-      {label:'Q3 (75%)',value:stats=>formatValue(stats.q3)},
-      {label:'Máximo',value:stats=>formatValue(stats.max)},
-      {label:'Promedio',value:stats=>formatValue(stats.mean)},
-      {label:'Rango intercuartílico (IQR)',value:stats=>formatValue(stats.iqr)},
-      {label:'Límite inferior (1.5 IQR)',value:stats=>formatValue(stats.lowerFence)},
-      {label:'Límite superior (1.5 IQR)',value:stats=>formatValue(stats.upperFence)},
-      {label:'Valores atípicos',value:stats=>stats.outliers.length?stats.outliers.map(formatValue).join(', '):'Ninguno'}
+      {label:'Cantidad de valores',getValue:stats=>stats.count,format:value=>fmtInt(value),chart:true},
+      {label:'Mínimo',getValue:stats=>stats.min,format:value=>formatter(value),chart:true},
+      {label:'Q1 (25%)',getValue:stats=>stats.q1,format:value=>formatter(value),chart:true},
+      {label:'Mediana (50%)',getValue:stats=>stats.median,format:value=>formatter(value),chart:true},
+      {label:'Q3 (75%)',getValue:stats=>stats.q3,format:value=>formatter(value),chart:true},
+      {label:'Máximo',getValue:stats=>stats.max,format:value=>formatter(value),chart:true},
+      {label:'Promedio',getValue:stats=>stats.mean,format:value=>formatter(value),chart:true},
+      {label:'Rango intercuartílico (IQR)',getValue:stats=>stats.iqr,format:value=>formatter(value),chart:true},
+      {label:'Límite inferior (1.5 IQR)',getValue:stats=>stats.lowerFence,format:value=>formatter(value),chart:true},
+      {label:'Límite superior (1.5 IQR)',getValue:stats=>stats.upperFence,format:value=>formatter(value),chart:true},
+      {label:'Valores atípicos',getValue:stats=>stats.outliers,format:value=>{
+        const arr=Array.isArray(value)?value.filter(Number.isFinite):[];
+        return arr.length?arr.map(v=>formatter(v)).join(', '):'Ninguno';
+      },chart:false,isArray:true}
     ];
     tbody.innerHTML=metrics.map(metric=>{
-      const cells=enriched.map(detail=>`<td>${metric.value(detail.stats)}</td>`);
+      const cells=enriched.map(detail=>{
+        const raw=metric.getValue(detail.stats);
+        if(metric.isArray){
+          return `<td>${metric.format(raw,detail.stats)}</td>`;
+        }
+        return `<td>${Number.isFinite(raw)?metric.format(raw,detail.stats):'—'}</td>`;
+      });
       return `<tr><td>${metric.label}</td>${cells.join('')}</tr>`;
     }).join('');
     wrap.style.display='block';
-    return true;
+    return {visible:true,enriched,metrics};
   };
-  const hasPrice=renderTable(priceTable,priceWrap,priceDetails,fmtPrice);
-  const hasOrders=renderTable(ordersTable,ordersWrap,orderDetails,fmtNumber);
-  if(hasPrice||hasOrders){
+  const priceResult=renderTable(priceTable,priceWrap,priceDetails,fmtPrice);
+  const ordersResult=renderTable(ordersTable,ordersWrap,orderDetails,fmtNumber);
+  updatePriceBoxChart(priceResult.enriched,priceResult.metrics);
+  if(priceResult.visible||ordersResult.visible){
     container.style.display='grid';
     container.style.gridTemplateColumns='1fr';
   } else {
