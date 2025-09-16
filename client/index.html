@@ -27,6 +27,7 @@
   .chip{background:var(--chip);border:1px solid var(--border);padding:6px 10px;border-radius:999px}
     .table-wrap{overflow:auto;border:1px solid var(--border);border-radius:12px}
     table{width:100%;border-collapse:collapse;min-width:1080px}
+    .table-small{min-width:0;width:100%;}
   thead th{position:sticky;top:0;background:#0e1520;border-bottom:1px solid var(--border);padding:12px;font-size:12px;text-align:left;user-select:none}
   thead tr.head th{cursor:pointer;top:0;z-index:3}
   thead tr.filters th{top:44px;z-index:2;background:#0e1520;cursor:default;padding:8px}
@@ -141,6 +142,32 @@
       <canvas id="chartStargateBubble" style="height:360px"></canvas>
     </div>
     <p id="chartStargateBubbleNote" class="note" style="display:none"></p>
+    <div id="boxplotTables" class="row" style="display:none;margin:16px 0">
+      <div id="priceBoxWrap" class="table-wrap">
+        <table id="priceBoxTable" class="table-small">
+          <caption>Resumen box plot · Top 10 por precio</caption>
+          <thead>
+            <tr>
+              <th>Métrica</th>
+              <th>Valor</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div id="ordersBoxWrap" class="table-wrap">
+        <table id="ordersBoxTable" class="table-small">
+          <caption>Resumen box plot · Top 10 por órdenes</caption>
+          <thead>
+            <tr>
+              <th>Métrica</th>
+              <th>Valor</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
     <canvas id="chartScatter"></canvas>
     <p id="chartScatterNote" class="note" style="display:none"></p>
     <canvas id="chartAge"></canvas>
@@ -672,6 +699,75 @@ function colorForRegionCount(count){
   const idx=(count-1)%palette.length;
   return palette[idx];
 }
+function computeQuantile(sorted,q){
+  if(!sorted.length) return NaN;
+  const pos=(sorted.length-1)*q;
+  const base=Math.floor(pos);
+  const rest=pos-base;
+  if(sorted[base+1]!==undefined){
+    return sorted[base]+rest*(sorted[base+1]-sorted[base]);
+  }
+  return sorted[base];
+}
+function computeBoxPlotStats(values){
+  const valid=values.filter(v=>Number.isFinite(v));
+  if(!valid.length) return null;
+  const sorted=[...valid].sort((a,b)=>a-b);
+  const min=sorted[0];
+  const max=sorted[sorted.length-1];
+  const q1=computeQuantile(sorted,0.25);
+  const median=computeQuantile(sorted,0.5);
+  const q3=computeQuantile(sorted,0.75);
+  const iqr=q3-q1;
+  const lowerFence=q1-1.5*iqr;
+  const upperFence=q3+1.5*iqr;
+  const outliers=sorted.filter(v=>v<lowerFence||v>upperFence);
+  const mean=sorted.reduce((sum,v)=>sum+v,0)/sorted.length;
+  return {count:sorted.length,min,q1,median,q3,max,iqr,lowerFence,upperFence,outliers,mean};
+}
+function updateBoxPlotTables(priceValues=[],orderValues=[]){
+  const container=j('#boxplotTables');
+  const priceWrap=j('#priceBoxWrap');
+  const ordersWrap=j('#ordersBoxWrap');
+  const priceBody=j('#priceBoxTable tbody');
+  const ordersBody=j('#ordersBoxTable tbody');
+  if(!container||!priceWrap||!ordersWrap||!priceBody||!ordersBody) return;
+  const priceStats=computeBoxPlotStats(priceValues);
+  const orderStats=computeBoxPlotStats(orderValues);
+  const rowsFor=(stats,formatter)=>[
+    ['Cantidad de valores',fmtInt(stats.count)],
+    ['Mínimo',formatter(stats.min)],
+    ['Q1 (25%)',formatter(stats.q1)],
+    ['Mediana (50%)',formatter(stats.median)],
+    ['Q3 (75%)',formatter(stats.q3)],
+    ['Máximo',formatter(stats.max)],
+    ['Promedio',formatter(stats.mean)],
+    ['Rango intercuartílico (IQR)',formatter(stats.iqr)],
+    ['Límite inferior (1.5 IQR)',formatter(stats.lowerFence)],
+    ['Límite superior (1.5 IQR)',formatter(stats.upperFence)],
+    ['Valores atípicos',stats.outliers.length?stats.outliers.map(formatter).join(', '):'Ninguno']
+  ];
+  if(priceStats){
+    priceBody.innerHTML=rowsFor(priceStats,fmtPrice).map(([label,val])=>`<tr><td>${label}</td><td>${val}</td></tr>`).join('');
+    priceWrap.style.display='block';
+  } else {
+    priceBody.innerHTML='';
+    priceWrap.style.display='none';
+  }
+  if(orderStats){
+    ordersBody.innerHTML=rowsFor(orderStats,fmtPrice).map(([label,val])=>`<tr><td>${label}</td><td>${val}</td></tr>`).join('');
+    ordersWrap.style.display='block';
+  } else {
+    ordersBody.innerHTML='';
+    ordersWrap.style.display='none';
+  }
+  if(priceStats||orderStats){
+    container.style.display='grid';
+    container.style.gridTemplateColumns=priceStats&&orderStats?'1fr 1fr':'1fr';
+  } else {
+    container.style.display='none';
+  }
+}
 function updateStargateBubble(rows=[]){
   const wrap=j('#stargateBubbleWrap');
   const canvas=j('#chartStargateBubble');
@@ -771,6 +867,7 @@ function exportCSV(){ let rows=ordersRaw.map(mapOrder); rows=applyFilters(rows,c
 
 function generateCharts(){
   const rows=getFilteredRows();
+  updateBoxPlotTables([],[]);
   if(!rows.length){ alert('No hay datos para graficar'); return; }
   j('#analytics').style.display='block';
   // KPIs
@@ -938,6 +1035,7 @@ function generateCharts(){
 
     const topOrders=[...orderCount.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10);
     const bottomOrders=[...orderCount.entries()].filter(([,v])=>v>0).sort((a,b)=>a[1]-b[1]).slice(0,10);
+    updateBoxPlotTables(topPrice.map(([,v])=>v), topOrders.map(([,v])=>v));
     if(topOrders.length){
       try{
         const el=j('#chartOrders');
