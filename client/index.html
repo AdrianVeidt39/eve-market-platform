@@ -145,7 +145,7 @@
     <div id="boxplotTables" class="row" style="display:none;margin:16px 0">
       <div id="priceBoxWrap" class="table-wrap">
         <table id="priceBoxTable" class="table-small">
-          <caption>Resumen box plot · Top 10 por precio</caption>
+          <caption>Resumen box plot · Top 10 por precio (por artículo)</caption>
           <thead>
             <tr>
               <th>Métrica</th>
@@ -157,7 +157,7 @@
       </div>
       <div id="ordersBoxWrap" class="table-wrap">
         <table id="ordersBoxTable" class="table-small">
-          <caption>Resumen box plot · Top 10 por órdenes</caption>
+          <caption>Resumen box plot · Top 10 por órdenes (por artículo)</caption>
           <thead>
             <tr>
               <th>Métrica</th>
@@ -253,6 +253,7 @@ const USER_AGENT = "EVE Market Explorer (leo.devo@live.com.mx)";
 const j = s=>document.querySelector(s);
 const fmtPrice = n=>Number(n).toLocaleString("es-MX",{maximumFractionDigits:2});
 const fmtInt = n=>Number(n).toLocaleString("es-MX",{maximumFractionDigits:0});
+const fmtNumber = n=>Number(n).toLocaleString("es-MX",{maximumFractionDigits:2});
 const fmtBig = n=>{
   const abs=Math.abs(n); const opts={maximumFractionDigits:1};
   if(abs>=1e18) return (n/1e18).toLocaleString("es-MX",opts)+" T";
@@ -725,45 +726,56 @@ function computeBoxPlotStats(values){
   const mean=sorted.reduce((sum,v)=>sum+v,0)/sorted.length;
   return {count:sorted.length,min,q1,median,q3,max,iqr,lowerFence,upperFence,outliers,mean};
 }
-function updateBoxPlotTables(priceValues=[],orderValues=[]){
+function updateBoxPlotTables(priceDetails=[],orderDetails=[]){
   const container=j('#boxplotTables');
   const priceWrap=j('#priceBoxWrap');
   const ordersWrap=j('#ordersBoxWrap');
-  const priceBody=j('#priceBoxTable tbody');
-  const ordersBody=j('#ordersBoxTable tbody');
-  if(!container||!priceWrap||!ordersWrap||!priceBody||!ordersBody) return;
-  const priceStats=computeBoxPlotStats(priceValues);
-  const orderStats=computeBoxPlotStats(orderValues);
-  const rowsFor=(stats,formatter)=>[
-    ['Cantidad de valores',fmtInt(stats.count)],
-    ['Mínimo',formatter(stats.min)],
-    ['Q1 (25%)',formatter(stats.q1)],
-    ['Mediana (50%)',formatter(stats.median)],
-    ['Q3 (75%)',formatter(stats.q3)],
-    ['Máximo',formatter(stats.max)],
-    ['Promedio',formatter(stats.mean)],
-    ['Rango intercuartílico (IQR)',formatter(stats.iqr)],
-    ['Límite inferior (1.5 IQR)',formatter(stats.lowerFence)],
-    ['Límite superior (1.5 IQR)',formatter(stats.upperFence)],
-    ['Valores atípicos',stats.outliers.length?stats.outliers.map(formatter).join(', '):'Ninguno']
-  ];
-  if(priceStats){
-    priceBody.innerHTML=rowsFor(priceStats,fmtPrice).map(([label,val])=>`<tr><td>${label}</td><td>${val}</td></tr>`).join('');
-    priceWrap.style.display='block';
-  } else {
-    priceBody.innerHTML='';
-    priceWrap.style.display='none';
-  }
-  if(orderStats){
-    ordersBody.innerHTML=rowsFor(orderStats,fmtPrice).map(([label,val])=>`<tr><td>${label}</td><td>${val}</td></tr>`).join('');
-    ordersWrap.style.display='block';
-  } else {
-    ordersBody.innerHTML='';
-    ordersWrap.style.display='none';
-  }
-  if(priceStats||orderStats){
+  const priceTable=j('#priceBoxTable');
+  const ordersTable=j('#ordersBoxTable');
+  if(!container||!priceWrap||!ordersWrap||!priceTable||!ordersTable) return;
+  const renderTable=(table,wrap,details,formatter)=>{
+    const thead=table.querySelector('thead');
+    const tbody=table.querySelector('tbody');
+    if(!thead||!tbody) return false;
+    const enriched=details.map(detail=>{
+      const stats=computeBoxPlotStats(detail?.values||[]);
+      if(!stats) return null;
+      return {name:detail.name,stats};
+    }).filter(Boolean);
+    if(!enriched.length){
+      thead.innerHTML='<tr><th>Métrica</th><th>Valor</th></tr>';
+      tbody.innerHTML='';
+      wrap.style.display='none';
+      return false;
+    }
+    const headers=['<th>Métrica</th>'].concat(enriched.map(detail=>`<th>${escapeHtml(detail.name)}</th>`));
+    thead.innerHTML=`<tr>${headers.join('')}</tr>`;
+    const formatValue=val=>Number.isFinite(val)?formatter(val):'—';
+    const metrics=[
+      {label:'Cantidad de valores',value:stats=>fmtInt(stats.count)},
+      {label:'Mínimo',value:stats=>formatValue(stats.min)},
+      {label:'Q1 (25%)',value:stats=>formatValue(stats.q1)},
+      {label:'Mediana (50%)',value:stats=>formatValue(stats.median)},
+      {label:'Q3 (75%)',value:stats=>formatValue(stats.q3)},
+      {label:'Máximo',value:stats=>formatValue(stats.max)},
+      {label:'Promedio',value:stats=>formatValue(stats.mean)},
+      {label:'Rango intercuartílico (IQR)',value:stats=>formatValue(stats.iqr)},
+      {label:'Límite inferior (1.5 IQR)',value:stats=>formatValue(stats.lowerFence)},
+      {label:'Límite superior (1.5 IQR)',value:stats=>formatValue(stats.upperFence)},
+      {label:'Valores atípicos',value:stats=>stats.outliers.length?stats.outliers.map(formatValue).join(', '):'Ninguno'}
+    ];
+    tbody.innerHTML=metrics.map(metric=>{
+      const cells=enriched.map(detail=>`<td>${metric.value(detail.stats)}</td>`);
+      return `<tr><td>${metric.label}</td>${cells.join('')}</tr>`;
+    }).join('');
+    wrap.style.display='block';
+    return true;
+  };
+  const hasPrice=renderTable(priceTable,priceWrap,priceDetails,fmtPrice);
+  const hasOrders=renderTable(ordersTable,ordersWrap,orderDetails,fmtNumber);
+  if(hasPrice||hasOrders){
     container.style.display='grid';
-    container.style.gridTemplateColumns=priceStats&&orderStats?'1fr 1fr':'1fr';
+    container.style.gridTemplateColumns=hasPrice&&hasOrders?'1fr 1fr':'1fr';
   } else {
     container.style.display='none';
   }
@@ -894,6 +906,7 @@ function generateCharts(){
   const volMap=new Map();
   const priceMap=new Map();
   const orderCount=new Map();
+  const orderLocationCounts=new Map();
   const sysUnits=new Map();
   const scatterPV=[];
   const days=[];
@@ -902,6 +915,10 @@ function generateCharts(){
     if(!priceMap.has(r.type_name)) priceMap.set(r.type_name,[]);
     priceMap.get(r.type_name).push(r.price);
     orderCount.set(r.type_name,(orderCount.get(r.type_name)||0)+1);
+    if(!orderLocationCounts.has(r.type_name)) orderLocationCounts.set(r.type_name,new Map());
+    const locMap=orderLocationCounts.get(r.type_name);
+    const locKey=r.station_id!=null?`station:${r.station_id}`:r.system_id!=null?`system:${r.system_id}`:'unknown';
+    locMap.set(locKey,(locMap.get(locKey)||0)+1);
     sysUnits.set(r.system_id,(sysUnits.get(r.system_id)||0)+r.volume_remain);
     scatterPV.push({x:r.volume_remain,y:r.price});
     days.push(Math.trunc((Date.now()-new Date(r.issued).getTime())/86400000));
@@ -1035,7 +1052,16 @@ function generateCharts(){
 
     const topOrders=[...orderCount.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10);
     const bottomOrders=[...orderCount.entries()].filter(([,v])=>v>0).sort((a,b)=>a[1]-b[1]).slice(0,10);
-    updateBoxPlotTables(topPrice.map(([,v])=>v), topOrders.map(([,v])=>v));
+    const priceDetails=topPrice.map(([name])=>({
+      name,
+      values:(priceMap.get(name)||[]).filter(Number.isFinite)
+    }));
+    const orderDetails=topOrders.map(([name])=>{
+      const countsMap=orderLocationCounts.get(name);
+      const values=countsMap?Array.from(countsMap.values()).filter(Number.isFinite):[];
+      return {name,values};
+    });
+    updateBoxPlotTables(priceDetails,orderDetails);
     if(topOrders.length){
       try{
         const el=j('#chartOrders');
