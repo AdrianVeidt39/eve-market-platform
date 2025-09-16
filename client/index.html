@@ -775,7 +775,7 @@ function updateBoxPlotTables(priceDetails=[],orderDetails=[]){
   const hasOrders=renderTable(ordersTable,ordersWrap,orderDetails,fmtNumber);
   if(hasPrice||hasOrders){
     container.style.display='grid';
-    container.style.gridTemplateColumns=hasPrice&&hasOrders?'1fr 1fr':'1fr';
+    container.style.gridTemplateColumns='1fr';
   } else {
     container.style.display='none';
   }
