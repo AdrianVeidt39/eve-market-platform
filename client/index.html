@@ -365,10 +365,16 @@ function isCollapsedBoxStats(stats){
   return values.every(v=>nearlyEqual(v,values[0]));
 }
 
+function safeLocalStorageGet(key){
+  if(typeof localStorage === 'undefined') return null;
+  try{ return localStorage.getItem(key); }
+  catch(_){ return null; }
+}
+
 const LOG_ESI = (() => {
   const env = (typeof process !== 'undefined' && process.env && process.env.LOG_ESI) ??
               (typeof window !== 'undefined' && window.ENV && window.ENV.LOG_ESI) ??
-              (typeof localStorage !== 'undefined' && localStorage.getItem('LOG_ESI'));
+              safeLocalStorageGet('LOG_ESI');
   if (env === undefined || env === null) return true;
   return env === true || env === 'true';
 })();
@@ -376,6 +382,7 @@ const LOG_ESI = (() => {
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 24h
 
 function getCache(key){
+  if(typeof localStorage==='undefined') return null;
   try{
     const raw=localStorage.getItem(key);
     if(!raw) return null;
@@ -383,19 +390,27 @@ function getCache(key){
     if(Date.now()-ts < CACHE_TTL) return data;
     localStorage.removeItem(key);
   }catch(e){
-    localStorage.removeItem(key);
+    try{ localStorage.removeItem(key); }catch(_){/* ignore */}
   }
   return null;
 }
 
 function setCache(key,data){
-  localStorage.setItem(key,JSON.stringify({ts:Date.now(),data}));
+  if(typeof localStorage==='undefined') return;
+  try{
+    localStorage.setItem(key,JSON.stringify({ts:Date.now(),data}));
+  }catch(e){
+    try{ localStorage.removeItem(key); }catch(_){/* ignore */}
+  }
 }
 
 function clearCache(){
-  Object.keys(localStorage).forEach(k=>{
-    if(k.startsWith('esi.')) localStorage.removeItem(k);
-  });
+  if(typeof localStorage==='undefined') return;
+  try{
+    Object.keys(localStorage).forEach(k=>{
+      if(k.startsWith('esi.')) localStorage.removeItem(k);
+    });
+  }catch(_){/* ignore */}
 }
 
 window.clearEsiCache=clearCache;
