@@ -205,6 +205,8 @@
               <th class="sortable" data-k="min_volume">Mínimo de compra</th>
               <th class="sortable" data-k="range">Rango</th>
               <th class="sortable" data-k="system_name">Sistema</th>
+              <th class="sortable" data-k="constellation_name">Constelación</th>
+              <th class="sortable" data-k="region_name">Región</th>
               <th class="sortable" data-k="station_name">Estación</th>
               <th class="sortable" data-k="issued">Emitida</th>
               <th class="sortable" data-k="duration">Duración</th>
@@ -229,6 +231,8 @@
                 </select>
               </th>
               <th><select id="fSystem"><option value="all">Todos</option></select></th>
+              <th><select id="fConstellation"><option value="all">Todas</option></select></th>
+              <th><select id="fRegion"><option value="all">Todas</option></select></th>
               <th><select id="fStation"><option value="all">Todas</option></select></th>
               <th>
                 <select id="fIssued">
@@ -673,12 +677,21 @@ async function getSystemCached(id){
 
 async function getConstellationCached(id){
   const key=`esi.constellation.${id}`;
+  const numericId=typeof id==='number'?id:Number(id);
   let cons=getCache(key);
-  if(cons) return cons;
+  if(cons){
+    if(cons?.name && Number.isFinite(numericId)){
+      constellationNameMap.set(numericId,cons.name);
+    }
+    return cons;
+  }
   for(let attempt=0; attempt<3; attempt++){
     try{
       const {data}=await throttleEsiCall(()=>get(`${ESI}/universe/constellations/${id}/`,{},0));
       setCache(key,data);
+      if(data?.name && Number.isFinite(numericId)){
+        constellationNameMap.set(numericId,data.name);
+      }
       return data;
     }catch(e){
       if(!(e.message.includes('HTTP 420')||e.message.includes('HTTP 429'))||attempt===2) throw e;
@@ -689,6 +702,12 @@ async function getConstellationCached(id){
 }
 
 let regions=[],constellations=[],systems=[],stargates=[];
+let regionNameMap=new Map();
+let constellationNameMap=new Map();
+let currentRegionId=null;
+let currentRegionName='';
+let currentConstellationId=null;
+let currentConstellationName='';
 let stationsInConstellation=new Set();
 let stationToSystem=new Map();
 let systemNameMap=new Map();
@@ -704,6 +723,30 @@ let ordersBoxMetricsChart=null;
 const chartIds=['chartVol','chartVolBottom','chartVal','chartValBottom','chartOrders','chartOrdersBottom','chartScatter','chartAge'];
 let chartsReady=false;
 let loadingConnectedOrders=false;
+
+function updateRegionNameCache(list){
+  if(!Array.isArray(list)) return;
+  for(const item of list){
+    if(!item) continue;
+    const id=typeof item.id==='number'?item.id:Number(item.id);
+    if(!Number.isFinite(id)) continue;
+    if(typeof item.name==='string' && item.name){
+      regionNameMap.set(id,item.name);
+    }
+  }
+}
+
+function updateConstellationNameCache(list){
+  if(!Array.isArray(list)) return;
+  for(const item of list){
+    if(!item) continue;
+    const id=typeof item.id==='number'?item.id:Number(item.id);
+    if(!Number.isFinite(id)) continue;
+    if(typeof item.name==='string' && item.name){
+      constellationNameMap.set(id,item.name);
+    }
+  }
+}
 
 function syncOrdersRaw(){
   ordersRaw = baseOrdersRaw.concat(connectedOrdersRaw);
@@ -759,11 +802,52 @@ function refreshSystemFilter(){
 function refreshStationFilter(){
   const stSel=j('#fStation');
   if(!stSel) return;
-  const stationOptions=[...new Set(ordersRaw.map(o=>o.location_id))].map(id=>{
-    const label=nameCache.get(id)||id;
-    return `<option value="${id}">${escapeHtml(label)}</option>`;
-  }).join("");
-  stSel.innerHTML=`<option value="all">Todas</option>` + stationOptions;
+  const previous=stSel.value;
+  const stationOptions=new Map();
+  for(const order of ordersRaw){
+    const stationId=order.location_id;
+    if(stationId==null) continue;
+    const key=String(stationId);
+    if(!stationOptions.has(key)){
+      const label=nameCache.get(stationId)||stationId;
+      stationOptions.set(key,label);
+    }
+  }
+  const sorted=[...stationOptions.entries()].sort((a,b)=>String(a[1]).localeCompare(String(b[1])));
+  stSel.innerHTML=`<option value="all">Todas</option>` + sorted.map(([id,name])=>`<option value="${id}">${escapeHtml(name)}</option>`).join("");
+  if(previous!=='all' && stationOptions.has(previous)) stSel.value=previous; else stSel.value='all';
+}
+
+function refreshConstellationFilter(){
+  const consSel=j('#fConstellation');
+  if(!consSel) return;
+  const previous=consSel.value;
+  const options=new Map();
+  const mappedOrders=ordersRaw.map(mapOrder);
+  for(const row of mappedOrders){
+    if(row.constellation_id==null) continue;
+    const key=String(row.constellation_id);
+    if(!options.has(key)) options.set(key,row.constellation_name||String(row.constellation_id));
+  }
+  const sorted=[...options.entries()].sort((a,b)=>String(a[1]).localeCompare(String(b[1])));
+  consSel.innerHTML=`<option value="all">Todas</option>` + sorted.map(([value,label])=>`<option value="${value}">${escapeHtml(label)}</option>`).join("");
+  if(previous!=='all' && options.has(previous)) consSel.value=previous; else consSel.value='all';
+}
+
+function refreshRegionFilter(){
+  const regionSel=j('#fRegion');
+  if(!regionSel) return;
+  const previous=regionSel.value;
+  const options=new Map();
+  const mappedOrders=ordersRaw.map(mapOrder);
+  for(const row of mappedOrders){
+    if(row.region_id==null) continue;
+    const key=String(row.region_id);
+    if(!options.has(key)) options.set(key,row.region_name||String(row.region_id));
+  }
+  const sorted=[...options.entries()].sort((a,b)=>String(a[1]).localeCompare(String(b[1])));
+  regionSel.innerHTML=`<option value="all">Todas</option>` + sorted.map(([value,label])=>`<option value="${value}">${escapeHtml(label)}</option>`).join("");
+  if(previous!=='all' && options.has(previous)) regionSel.value=previous; else regionSel.value='all';
 }
 
 function removeTopPriceSummaryTables(){
@@ -829,23 +913,35 @@ async function loadRegions(){
   const sel=j('#region');
   if(cached){
     regions=cached;
+    updateRegionNameCache(regions);
     sel.innerHTML = `<option value="" disabled selected>Selecciona región…</option>` + regions.map(r=>`<option value="${r.id}">${r.name}</option>`).join("");
     return;
   }
   const {data:ids}=await throttleEsiCall(()=>get(`${ESI}/universe/regions/`));
   const names=await throttleEsiCall(()=>post(`${ESI}/universe/names/`,ids));
   regions=names.filter(x=>x.category==="region").map(x=>({id:x.id,name:x.name})).sort((a,b)=>a.name.localeCompare(b.name));
+  updateRegionNameCache(regions);
   setCache('esi.regions',regions);
   sel.innerHTML = `<option value="" disabled selected>Selecciona región…</option>` + regions.map(r=>`<option value="${r.id}">${r.name}</option>`).join("");
 }
 async function onRegionChange(){
   resetLower();
   const regionId=+j('#region').value;
+  if(Number.isFinite(regionId)){
+    currentRegionId=regionId;
+    const regionEntry=regions.find(r=>r.id===regionId);
+    const mappedName=regionNameMap.get(regionId);
+    currentRegionName=(regionEntry?.name)||mappedName||(String(regionId));
+  }else{
+    currentRegionId=null;
+    currentRegionName='';
+  }
   const cacheKey=`esi.constellations.${regionId}`;
   const sel=j('#constellation');
   const cached=getCache(cacheKey);
   if(cached){
     constellations=cached;
+    updateConstellationNameCache(constellations);
     sel.innerHTML = `<option value="" disabled selected>Selecciona constelación…</option>` + constellations.map(c=>`<option value="${c.id}">${c.name}</option>`).join("");
     sel.disabled=false;
     return;
@@ -853,6 +949,7 @@ async function onRegionChange(){
   const {data:regionDetail}=await throttleEsiCall(()=>get(`${ESI}/universe/regions/${regionId}/`));
   const names=await throttleEsiCall(()=>post(`${ESI}/universe/names/`,regionDetail.constellations));
   constellations=names.filter(x=>x.category==="constellation").map(x=>({id:x.id,name:x.name})).sort((a,b)=>a.name.localeCompare(b.name));
+  updateConstellationNameCache(constellations);
   sel.innerHTML = `<option value="" disabled selected>Selecciona constelación…</option>` + constellations.map(c=>`<option value="${c.id}">${c.name}</option>`).join("");
   sel.disabled=false;
   setCache(cacheKey,constellations);
@@ -863,6 +960,20 @@ async function onConstellationChange(){
   ordersRaw=[];
   render();
   const consId=+j('#constellation').value;
+  if(Number.isFinite(consId)){
+    currentConstellationId=consId;
+    const consEntry=constellations.find(c=>c.id===consId);
+    if(consEntry && consEntry.name){
+      currentConstellationName=consEntry.name;
+      constellationNameMap.set(consId,consEntry.name);
+    }else{
+      const mapped=constellationNameMap.get(consId);
+      currentConstellationName=(typeof mapped==='string'&&mapped)?mapped:String(consId);
+    }
+  }else{
+    currentConstellationId=null;
+    currentConstellationName='';
+  }
   const cacheKey=`esi.systems.${consId}`;
   const cached=getCache(cacheKey);
   const sysSel=j('#fSystem');
@@ -887,6 +998,10 @@ async function onConstellationChange(){
     return;
   }
   const {data:cons}=await throttleEsiCall(()=>get(`${ESI}/universe/constellations/${consId}/`));
+  if(cons?.name){
+    currentConstellationName=cons.name;
+    if(Number.isFinite(consId)) constellationNameMap.set(consId,cons.name);
+  }
   const sysNames=await throttleEsiCall(()=>post(`${ESI}/universe/names/`,cons.systems));
   systems=sysNames.filter(x=>x.category==="solar_system").map(x=>({id:x.id,name:x.name,pos:{x:0,y:0},gatesSameRegion:0,gatesOtherRegion:0,totalStargates:0,otherConstellationGates:0})).sort((a,b)=>a.name.localeCompare(b.name));
   systems.forEach(s=>systemNameMap.set(s.id,s.name));
@@ -945,6 +1060,8 @@ function resetLower(){
   j('#constellation').disabled=true;
   j('#constellation').innerHTML='';
   j('#queryBtn').disabled=true;
+  currentConstellationId=null;
+  currentConstellationName='';
   stationsInConstellation=new Set();
   stationToSystem=new Map();
   systemNameMap=new Map();
@@ -958,6 +1075,8 @@ function resetLower(){
   hideConnectedNote();
   refreshSystemFilter();
   refreshStationFilter();
+  refreshConstellationFilter();
+  refreshRegionFilter();
   renderSystemsTable();
   renderStargatesTable();
   render();
@@ -989,6 +1108,8 @@ async function queryMarket(){
     const ids=new Set(); for(const o of ordersRaw){ ids.add(o.type_id); ids.add(o.location_id);} if(ids.size){ const arr=[...ids]; const chunk=900; for(let i=0;i<arr.length;i+=chunk){ const names=await throttleEsiCall(()=>post(`${ESI}/universe/names/`,arr.slice(i,i+chunk))); for(const n of names){ nameCache.set(n.id,n.name);} }}
     refreshSystemFilter();
     refreshStationFilter();
+    refreshConstellationFilter();
+    refreshRegionFilter();
     render();
   }catch(err){ logError(err); j('#busyHint').style.display='none'; alert('Fallo al consultar ESI. Revisa conexión o intenta con otra región.'); }
 }
@@ -996,16 +1117,96 @@ function filterAndPush(arr){
   let pushed=false;
   for(const o of arr){
     if(stationsInConstellation.has(o.location_id)){
-      baseOrdersRaw.push(o);
+      baseOrdersRaw.push({
+        ...o,
+        __constellationId:currentConstellationId,
+        __constellationName:currentConstellationName,
+        __regionId:currentRegionId,
+        __regionName:currentRegionName
+      });
       pushed=true;
     }
   }
   if(pushed) syncOrdersRaw();
 }
 
-function currentFilters(){ return { type:j('#fType').value.trim().toLowerCase(), side:j('#fSide').value, pmin:parseFloat(j('#fPriceMin').value||'NaN'), pmax:parseFloat(j('#fPriceMax').value||'NaN'), vmin:parseInt(j('#fVolMin').value||'NaN'), vmax:parseInt(j('#fVolMax').value||'NaN'), mmin:parseInt(j('#fMinMin').value||'NaN'), mmax:parseInt(j('#fMinMax').value||'NaN'), range:j('#fRange').value, system:j('#fSystem').value, station:j('#fStation').value, issued:j('#fIssued').value, duration:j('#fDuration').value }; }
-function mapOrder(o){ const sysId=stationToSystem.get(o.location_id); return { type_id:o.type_id, type_name:nameCache.get(o.type_id)||o.type_id, order_type:o.is_buy_order?'buy':'sell', price:o.price, volume_remain:o.volume_remain, min_volume:o.min_volume, range:o.range, station_id:o.location_id, station_name:nameCache.get(o.location_id)||o.location_id, system_id:sysId, system_name:systemNameMap.get(sysId)||sysId, issued:o.issued, duration:o.duration }; }
-function applyFilters(rows,f){ return rows.filter(r=>{ if(f.type&&!(""+r.type_name).toLowerCase().includes(f.type))return false; if(f.side!=='all'&&r.order_type!==f.side)return false; if(!Number.isNaN(f.pmin)&&r.price<f.pmin)return false; if(!Number.isNaN(f.pmax)&&r.price>f.pmax)return false; if(!Number.isNaN(f.vmin)&&r.volume_remain<f.vmin)return false; if(!Number.isNaN(f.vmax)&&r.volume_remain>f.vmax)return false; if(!Number.isNaN(f.mmin)&&r.min_volume<f.mmin)return false; if(!Number.isNaN(f.mmax)&&r.min_volume>f.mmax)return false; if(f.range!=='all'&&(""+r.range)!==f.range)return false; if(f.system!=='all'&&(""+r.system_id)!==f.system)return false; if(f.station!=='all'&&(""+r.station_id)!==f.station)return false; if(f.issued!=='all'){ const d=isoDaysAgo(r.issued); if(f.issued==='24h'&&d>1)return false; if(f.issued==='7d'&&d>7)return false; if(f.issued==='30d'&&d>30)return false;} if(f.duration!=='all'&&(""+r.duration)!==(f.duration))return false; return true; }); }
+function currentFilters(){ return { type:j('#fType').value.trim().toLowerCase(), side:j('#fSide').value, pmin:parseFloat(j('#fPriceMin').value||'NaN'), pmax:parseFloat(j('#fPriceMax').value||'NaN'), vmin:parseInt(j('#fVolMin').value||'NaN'), vmax:parseInt(j('#fVolMax').value||'NaN'), mmin:parseInt(j('#fMinMin').value||'NaN'), mmax:parseInt(j('#fMinMax').value||'NaN'), range:j('#fRange').value, system:j('#fSystem').value, constellation:j('#fConstellation').value, region:j('#fRegion').value, station:j('#fStation').value, issued:j('#fIssued').value, duration:j('#fDuration').value }; }
+function mapOrder(o){
+  let sysId=stationToSystem.get(o.location_id);
+  if(sysId==null && typeof o.system_id==='number') sysId=o.system_id;
+  const validConstId=Number.isFinite(o.__constellationId)?o.__constellationId:(Number.isFinite(currentConstellationId)?currentConstellationId:null);
+  let constellationName=o.__constellationName;
+  if(!constellationName && Number.isFinite(validConstId)){
+    constellationName=constellationNameMap.get(validConstId);
+    if(!constellationName){
+      const found=constellations.find(c=>c.id===validConstId);
+      if(found) constellationName=found.name;
+    }
+    if(!constellationName){
+      const cached=nameCache.get(validConstId);
+      if(typeof cached==='string' && cached) constellationName=cached;
+    }
+  }
+  const validRegionId=Number.isFinite(o.__regionId)?o.__regionId:(Number.isFinite(currentRegionId)?currentRegionId:null);
+  let regionName=o.__regionName;
+  if(!regionName && Number.isFinite(validRegionId)){
+    regionName=regionNameMap.get(validRegionId);
+    if(!regionName){
+      const cached=nameCache.get(validRegionId);
+      if(typeof cached==='string' && cached) regionName=cached;
+    }
+  }
+  const resolvedConstellationName=(typeof constellationName==='string' && constellationName)?constellationName:(validConstId!=null?String(validConstId):'—');
+  const resolvedRegionName=(typeof regionName==='string' && regionName)?regionName:(validRegionId!=null?String(validRegionId):'—');
+  return {
+    type_id:o.type_id,
+    type_name:nameCache.get(o.type_id)||o.type_id,
+    order_type:o.is_buy_order?'buy':'sell',
+    price:o.price,
+    volume_remain:o.volume_remain,
+    min_volume:o.min_volume,
+    range:o.range,
+    station_id:o.location_id,
+    station_name:nameCache.get(o.location_id)||o.location_id,
+    system_id:sysId,
+    system_name:systemNameMap.get(sysId)||sysId||'—',
+    constellation_id:Number.isFinite(validConstId)?validConstId:null,
+    constellation_name:resolvedConstellationName,
+    region_id:Number.isFinite(validRegionId)?validRegionId:null,
+    region_name:resolvedRegionName,
+    issued:o.issued,
+    duration:o.duration
+  };
+}
+function applyFilters(rows,f){
+  return rows.filter(r=>{
+    if(f.type&&!(""+r.type_name).toLowerCase().includes(f.type))return false;
+    if(f.side!=='all'&&r.order_type!==f.side)return false;
+    if(!Number.isNaN(f.pmin)&&r.price<f.pmin)return false;
+    if(!Number.isNaN(f.pmax)&&r.price>f.pmax)return false;
+    if(!Number.isNaN(f.vmin)&&r.volume_remain<f.vmin)return false;
+    if(!Number.isNaN(f.vmax)&&r.volume_remain>f.vmax)return false;
+    if(!Number.isNaN(f.mmin)&&r.min_volume<f.mmin)return false;
+    if(!Number.isNaN(f.mmax)&&r.min_volume>f.mmax)return false;
+    if(f.range!=='all'&&(""+r.range)!==f.range)return false;
+    if(f.system!=='all'&&(""+r.system_id)!==f.system)return false;
+    if(f.constellation!=='all'){
+      if(r.constellation_id==null||(""+r.constellation_id)!==f.constellation) return false;
+    }
+    if(f.region!=='all'){
+      if(r.region_id==null||(""+r.region_id)!==f.region) return false;
+    }
+    if(f.station!=='all'&&(""+r.station_id)!==f.station)return false;
+    if(f.issued!=='all'){
+      const d=isoDaysAgo(r.issued);
+      if(f.issued==='24h'&&d>1)return false;
+      if(f.issued==='7d'&&d>7)return false;
+      if(f.issued==='30d'&&d>30)return false;
+    }
+    if(f.duration!=='all'&&(""+r.duration)!==(f.duration))return false;
+    return true;
+  });
+}
 function getFilteredRows(){ let rows=ordersRaw.map(mapOrder); const f=currentFilters(); rows=applyFilters(rows,f); return sortBy(rows,currentSort.k,currentSort.dir); }
 function render(){
   const tbody=j('#ordersTable tbody');
@@ -1015,7 +1216,7 @@ function render(){
   const disable=rows.length===0;
   j('#exportBtn').disabled=disable;
   j('#chartsBtn').disabled=disable;
-  tbody.innerHTML=rows.map(r=>`<tr><td>${escapeHtml(r.type_name)}</td><td>${r.order_type==='sell'?'Venta':'Compra'}</td><td>${fmtPrice(r.price)}</td><td>${fmtInt(r.volume_remain)}</td><td>${fmtInt(r.min_volume)}</td><td>${r.range}</td><td>${escapeHtml(r.system_name)}</td><td>${escapeHtml(r.station_name)}</td><td><span class="muted" title="${r.issued}">${new Date(r.issued).toLocaleString("es-MX")}</span></td><td>${r.duration}</td></tr>`).join('');
+  tbody.innerHTML=rows.map(r=>`<tr><td>${escapeHtml(r.type_name)}</td><td>${r.order_type==='sell'?'Venta':'Compra'}</td><td>${fmtPrice(r.price)}</td><td>${fmtInt(r.volume_remain)}</td><td>${fmtInt(r.min_volume)}</td><td>${r.range}</td><td>${escapeHtml(r.system_name)}</td><td>${escapeHtml(r.constellation_name)}</td><td>${escapeHtml(r.region_name)}</td><td>${escapeHtml(r.station_name)}</td><td><span class="muted" title="${r.issued}">${new Date(r.issued).toLocaleString("es-MX")}</span></td><td>${r.duration}</td></tr>`).join('');
   updateConnectedButtonState();
   updateStargateBubble(rows);
 }
@@ -1474,7 +1675,7 @@ function updateStargateBubble(rows=[]){
   note.style.display='block';
 }
 function escapeHtml(s){ return (""+s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[m])); }
-function exportCSV(){ let rows=ordersRaw.map(mapOrder); rows=applyFilters(rows,currentFilters()); rows=sortBy(rows,currentSort.k,currentSort.dir); const headers=["type_name","order_type","price","volume_remain","min_volume","range","system_name","station_name","issued","duration"]; const csv=[headers.join(",")].concat(rows.map(r=>[`"${(""+r.type_name).replace(/"/g,'""')}"`,r.order_type,r.price,r.volume_remain,r.min_volume,r.range,`"${(""+r.system_name).replace(/"/g,'""')}"`,`"${(""+r.station_name).replace(/"/g,'""')}"`,r.issued,r.duration].join(","))).join("\n"); const blob=new Blob([csv],{type:"text/csv;charset=utf-8"}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='ordenes_eve.csv'; a.click(); URL.revokeObjectURL(url); }
+function exportCSV(){ let rows=ordersRaw.map(mapOrder); rows=applyFilters(rows,currentFilters()); rows=sortBy(rows,currentSort.k,currentSort.dir); const headers=["type_name","order_type","price","volume_remain","min_volume","range","system_name","constellation_name","region_name","station_name","issued","duration"]; const csv=[headers.join(",")].concat(rows.map(r=>[`"${(""+r.type_name).replace(/"/g,'""')}"`,r.order_type,r.price,r.volume_remain,r.min_volume,r.range,`"${(""+r.system_name).replace(/"/g,'""')}"`,`"${(""+r.constellation_name).replace(/"/g,'""')}"`,`"${(""+r.region_name).replace(/"/g,'""')}"`,`"${(""+r.station_name).replace(/"/g,'""')}"`,r.issued,r.duration].join(","))).join("\n"); const blob=new Blob([csv],{type:"text/csv;charset=utf-8"}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='ordenes_eve.csv'; a.click(); URL.revokeObjectURL(url); }
 
 function generateCharts(){
   const rows=getFilteredRows();
@@ -1754,8 +1955,22 @@ async function loadConnectedConstellationOrders(){
       if(!destConstId || destConstId===sourceConsId) continue;
       let entry=destinationMap.get(destConstId);
       if(!entry){
-        entry={id:destConstId,name:gate.destConstellation||String(destConstId),regionId:gate.destRegionId,systemIds:new Set(),stationIds:new Set()};
+        entry={
+          id:destConstId,
+          name:gate.destConstellation||String(destConstId),
+          regionId:gate.destRegionId,
+          regionName:typeof gate.destRegion==='string'?gate.destRegion:'',
+          systemIds:new Set(),
+          stationIds:new Set()
+        };
         destinationMap.set(destConstId,entry);
+        if(Number.isFinite(destConstId) && entry.name){
+          constellationNameMap.set(destConstId,entry.name);
+        }
+        const regionNumeric=Number(entry.regionId);
+        if(Number.isFinite(regionNumeric) && entry.regionName){
+          regionNameMap.set(regionNumeric,entry.regionName);
+        }
       }
       if(typeof gate.destSystemId==='number') entry.systemIds.add(gate.destSystemId);
     }
@@ -1765,6 +1980,8 @@ async function loadConnectedConstellationOrders(){
       if(prevConnectedCount!==connectedOrdersRaw.length) chartsReady=false;
       refreshSystemFilter();
       refreshStationFilter();
+      refreshConstellationFilter();
+      refreshRegionFilter();
       render();
       showConnectedNote('<strong>Constelaciones destino consultadas:</strong> Ninguna. No se encontraron stargates hacia otras constelaciones.');
       return;
@@ -1775,12 +1992,23 @@ async function loadConnectedConstellationOrders(){
       try{ consData=await getConstellationCached(entry.id); }
       catch(e){ logError(e); }
       if(consData){
-        if(consData.name) entry.name=consData.name;
+        if(consData.name){
+          entry.name=consData.name;
+          if(Number.isFinite(entry.id)) constellationNameMap.set(entry.id,entry.name);
+        }
         if(Number.isFinite(consData.region_id)) entry.regionId=consData.region_id;
         if(Array.isArray(consData.systems)) consData.systems.forEach(id=>entry.systemIds.add(id));
       }
       const regionIdNum=Number(entry.regionId);
       if(Number.isFinite(regionIdNum)) entry.regionId=regionIdNum;
+      if(Number.isFinite(entry.regionId)){
+        const mappedRegionName=regionNameMap.get(entry.regionId);
+        if(mappedRegionName){
+          entry.regionName=mappedRegionName;
+        }else if(typeof entry.regionName==='string' && entry.regionName){
+          regionNameMap.set(entry.regionId,entry.regionName);
+        }
+      }
       for(const sysId of entry.systemIds){
         try{
           const sysData=await getSystemCached(sysId);
@@ -1802,6 +2030,8 @@ async function loadConnectedConstellationOrders(){
       if(prevConnectedCount!==connectedOrdersRaw.length) chartsReady=false;
       refreshSystemFilter();
       refreshStationFilter();
+      refreshConstellationFilter();
+      refreshRegionFilter();
       render();
       showConnectedNote('<strong>Constelaciones destino consultadas:</strong> Ninguna con estaciones NPC públicas disponibles.');
       return;
@@ -1835,7 +2065,9 @@ async function loadConnectedConstellationOrders(){
           if(!group.stationIds.has(order.location_id)) continue;
           const entry=group.stationToConst.get(order.location_id);
           if(!entry) continue;
-          fetchedOrders.push({...order,__constellationId:entry.id,__constellationName:entry.name});
+          const constellationName=entry.name || (Number.isFinite(entry.id)?(constellationNameMap.get(entry.id)||String(entry.id)):'');
+          const regionName=entry.regionName || (Number.isFinite(entry.regionId)?(regionNameMap.get(entry.regionId)||String(entry.regionId)):'');
+          fetchedOrders.push({...order,__constellationId:entry.id,__constellationName:constellationName,__regionId:entry.regionId,__regionName:regionName});
         }
         page++;
       }while(page<=totalPages);
@@ -1860,6 +2092,8 @@ async function loadConnectedConstellationOrders(){
     }
     refreshSystemFilter();
     refreshStationFilter();
+    refreshConstellationFilter();
+    refreshRegionFilter();
     render();
     const orderCounts=new Map();
     connectedOrdersRaw.forEach(o=>{
@@ -1883,7 +2117,7 @@ j('#queryBtn').addEventListener('click',queryMarket);
 j('#exportBtn').addEventListener('click',exportCSV);
 j('#chartsBtn').addEventListener('click',generateCharts);
 j('#connectedOrdersBtn').addEventListener('click',loadConnectedConstellationOrders);
-for(const id of ['fType','fSide','fPriceMin','fPriceMax','fVolMin','fVolMax','fMinMin','fMinMax','fRange','fSystem','fStation','fIssued','fDuration']){ j('#'+id).addEventListener('input',render); j('#'+id).addEventListener('change',render); }
+for(const id of ['fType','fSide','fPriceMin','fPriceMax','fVolMin','fVolMax','fMinMin','fMinMax','fRange','fSystem','fConstellation','fRegion','fStation','fIssued','fDuration']){ j('#'+id).addEventListener('input',render); j('#'+id).addEventListener('change',render); }
 document.querySelectorAll('thead tr.head th.sortable').forEach(th=>{ th.addEventListener('click',()=>{ const k=th.dataset.k; if(!k) return; if(currentSort.k===k){ currentSort.dir*=-1; } else { currentSort.k=k; currentSort.dir=1; } render(); }); });
 
 (async function init(){ try{ await loadRegions(); } catch(e){ logError(e); alert('Error cargando catálogos de ESI. Revisa tu conexión e inténtalo de nuevo.'); } })();
