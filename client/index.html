@@ -370,11 +370,8 @@ function hasDistinctBoxStats(stats){
   if(!stats) return false;
   const values=[stats.min,stats.q1,stats.median,stats.q3,stats.max];
   if(!values.every(Number.isFinite)) return false;
-  for(let i=0;i<values.length;i++){
-    for(let j=i+1;j<values.length;j++){
-      if(nearlyEqual(values[i],values[j])) return false;
-    }
-  }
+  if(isCollapsedBoxStats(stats)) return false;
+  if(nearlyEqual(stats.q1,stats.q3)) return false;
   return true;
 }
 
