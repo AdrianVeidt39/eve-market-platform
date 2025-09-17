@@ -300,6 +300,7 @@ const textColor = (styles.getPropertyValue('--text') || '#e6eef7').trim() || '#e
 const borderColorVar = (styles.getPropertyValue('--border') || '#223247').trim() || '#223247';
 const axisGridColor = borderColorVar.startsWith('#') ? `${borderColorVar}66` : 'rgba(34,50,71,0.4)';
 const BOX_TOLERANCE = 1e-9;
+const BOX_IQR_LINE_WIDTH = 14;
 
 const bubbleLabelPlugin = {
   id:'bubbleLabelPlugin',
@@ -363,6 +364,18 @@ function isCollapsedBoxStats(stats){
   const values=[stats.min,stats.q1,stats.median,stats.q3,stats.max];
   if(!values.every(Number.isFinite)) return false;
   return values.every(v=>nearlyEqual(v,values[0]));
+}
+
+function hasDistinctBoxStats(stats){
+  if(!stats) return false;
+  const values=[stats.min,stats.q1,stats.median,stats.q3,stats.max];
+  if(!values.every(Number.isFinite)) return false;
+  for(let i=0;i<values.length;i++){
+    for(let j=i+1;j<values.length;j++){
+      if(nearlyEqual(values[i],values[j])) return false;
+    }
+  }
+  return true;
 }
 
 function safeLocalStorageGet(key){
@@ -794,14 +807,14 @@ function colorForRegionCount(count){
       wrap.style.display='none';
       return;
     }
-    const collapsed=enriched.filter(detail=>isCollapsedBoxStats(detail.stats));
-    if(!collapsed.length){
+    const distinct=enriched.filter(detail=>hasDistinctBoxStats(detail.stats));
+    if(!distinct.length){
       wrap.style.display='none';
       return;
     }
-    const categories=collapsed.map(detail=>detail.name);
-    const values=collapsed
-      .map(detail=>detail.stats?.min)
+    const categories=distinct.map(detail=>detail.name);
+    const values=distinct
+      .flatMap(detail=>[detail.stats?.q1,detail.stats?.q3])
       .filter(Number.isFinite);
     if(!values.length){
       wrap.style.display='none';
@@ -838,19 +851,28 @@ function colorForRegionCount(count){
     priceBoxMetricsChart=new Chart(canvas,{
       type:'scatter',
       data:{
-        datasets:[{
-          label:'Valores constantes',
-          data:collapsed.map(detail=>({x:detail.stats.min,y:detail.name})),
-          pointStyle:'cross',
-          pointRadius:6,
-          pointHoverRadius:6,
-          pointBorderWidth:1.5,
-          pointBorderColor:accentColor,
-          pointBackgroundColor:accentColor,
-          showLine:false,
-          hitRadius:6
-        }]
-
+        datasets:distinct.map(detail=>({
+          label:detail.name,
+          data:[
+            {x:detail.stats.q1,y:detail.name},
+            {x:detail.stats.q3,y:detail.name}
+          ],
+          showLine:true,
+          pointRadius:0,
+          pointHoverRadius:0,
+          pointHitRadius:BOX_IQR_LINE_WIDTH,
+          borderColor:accentColor,
+          backgroundColor:accentColor,
+          borderWidth:BOX_IQR_LINE_WIDTH,
+          borderCapStyle:'round',
+          spanGaps:false,
+          clip:false,
+          segment:{
+            borderColor:accentColor,
+            borderWidth:BOX_IQR_LINE_WIDTH,
+            borderCapStyle:'round'
+          }
+        }))
       },
       options:{
         parsing:false,
@@ -894,14 +916,14 @@ function colorForRegionCount(count){
       wrap.style.display='none';
       return;
     }
-    const collapsed=enriched.filter(detail=>isCollapsedBoxStats(detail.stats));
-    if(!collapsed.length){
+    const distinct=enriched.filter(detail=>hasDistinctBoxStats(detail.stats));
+    if(!distinct.length){
       wrap.style.display='none';
       return;
     }
-    const categories=collapsed.map(detail=>detail.name);
-    const values=collapsed
-      .map(detail=>detail.stats?.min)
+    const categories=distinct.map(detail=>detail.name);
+    const values=distinct
+      .flatMap(detail=>[detail.stats?.q1,detail.stats?.q3])
       .filter(Number.isFinite);
     if(!values.length){
       wrap.style.display='none';
@@ -938,18 +960,28 @@ function colorForRegionCount(count){
     ordersBoxMetricsChart=new Chart(canvas,{
       type:'scatter',
       data:{
-        datasets:[{
-          label:'Valores constantes',
-          data:collapsed.map(detail=>({x:detail.stats.min,y:detail.name})),
-          pointStyle:'cross',
-          pointRadius:6,
-          pointHoverRadius:6,
-          pointBorderWidth:1.5,
-          pointBorderColor:accent2Color,
-          pointBackgroundColor:accent2Color,
-          showLine:false,
-          hitRadius:6
-        }]
+        datasets:distinct.map(detail=>({
+          label:detail.name,
+          data:[
+            {x:detail.stats.q1,y:detail.name},
+            {x:detail.stats.q3,y:detail.name}
+          ],
+          showLine:true,
+          pointRadius:0,
+          pointHoverRadius:0,
+          pointHitRadius:BOX_IQR_LINE_WIDTH,
+          borderColor:accent2Color,
+          backgroundColor:accent2Color,
+          borderWidth:BOX_IQR_LINE_WIDTH,
+          borderCapStyle:'round',
+          spanGaps:false,
+          clip:false,
+          segment:{
+            borderColor:accent2Color,
+            borderWidth:BOX_IQR_LINE_WIDTH,
+            borderCapStyle:'round'
+          }
+        }))
       },
       options:{
         parsing:false,
