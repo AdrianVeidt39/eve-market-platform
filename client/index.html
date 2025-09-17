@@ -344,6 +344,55 @@ const bubbleLabelPlugin = {
   }
 };
 
+const boxCollapsedPlugin={
+  id:'boxCollapsedPlugin',
+  afterDatasetsDraw(chart){
+    const opts=(chart.options?.plugins?.boxCollapsedPlugin)||{};
+    const size=opts.size??10;
+    const collapsedSize=opts.collapsedSize??(size+2);
+    const lineWidth=opts.lineWidth??2;
+    chart.data.datasets?.forEach((dataset,index)=>{
+      const marker=dataset?.boxIndicators;
+      if(!marker||!marker.highlight) return;
+      const meta=chart.getDatasetMeta(index);
+      if(!meta) return;
+      const points=meta.data?.filter(Boolean)??[];
+      if(!points.length) return;
+      const positions=points.map(point=>{
+        if(typeof point.tooltipPosition==='function'){
+          const pos=point.tooltipPosition();
+          if(Number.isFinite(pos?.x)&&Number.isFinite(pos?.y)) return pos;
+        }
+        if(typeof point.getCenterPoint==='function'){
+          const pos=point.getCenterPoint();
+          if(Number.isFinite(pos?.x)&&Number.isFinite(pos?.y)) return pos;
+        }
+        return null;
+      }).filter(Boolean);
+      if(!positions.length) return;
+      const center=positions.reduce((acc,pos)=>({
+        x:acc.x+pos.x,
+        y:acc.y+pos.y
+      }),{x:0,y:0});
+      center.x/=positions.length;
+      center.y/=positions.length;
+      const ctx=chart.ctx;
+      if(!ctx) return;
+      ctx.save();
+      ctx.lineWidth=marker.collapsed?(opts.collapsedLineWidth??lineWidth):lineWidth;
+      ctx.strokeStyle=marker.color||dataset.borderColor||'#fff';
+      const half=(marker.collapsed?collapsedSize:size)/2;
+      ctx.beginPath();
+      ctx.moveTo(center.x-half,center.y-half);
+      ctx.lineTo(center.x+half,center.y+half);
+      ctx.moveTo(center.x+half,center.y-half);
+      ctx.lineTo(center.x-half,center.y+half);
+      ctx.stroke();
+      ctx.restore();
+    });
+  }
+};
+
 Chart.defaults.color = '#fff';
 
 function fitBarHeight(canvas, count, factor=1){
@@ -370,11 +419,8 @@ function hasDistinctBoxStats(stats){
   if(!stats) return false;
   const values=[stats.min,stats.q1,stats.median,stats.q3,stats.max];
   if(!values.every(Number.isFinite)) return false;
-  for(let i=0;i<values.length;i++){
-    for(let j=i+1;j<values.length;j++){
-      if(nearlyEqual(values[i],values[j])) return false;
-    }
-  }
+  if(isCollapsedBoxStats(stats)) return false;
+  if(nearlyEqual(stats.q1,stats.q3)) return false;
   return true;
 }
 
@@ -807,14 +853,17 @@ function colorForRegionCount(count){
       wrap.style.display='none';
       return;
     }
-    const distinct=enriched.filter(detail=>hasDistinctBoxStats(detail.stats));
-    if(!distinct.length){
+    const ready=enriched.filter(detail=>{
+      const stats=detail?.stats;
+      return stats && Number.isFinite(stats.q1) && Number.isFinite(stats.q3);
+    });
+    if(!ready.length){
       wrap.style.display='none';
       return;
     }
-    const categories=distinct.map(detail=>detail.name);
-    const values=distinct
-      .flatMap(detail=>[detail.stats?.q1,detail.stats?.q3])
+    const categories=ready.map(detail=>detail.name);
+    const values=ready
+      .flatMap(detail=>[detail.stats?.min,detail.stats?.q1,detail.stats?.q3,detail.stats?.max])
       .filter(Number.isFinite);
     if(!values.length){
       wrap.style.display='none';
@@ -847,40 +896,54 @@ function colorForRegionCount(count){
         return fmtNumber(value);
       }
     };
+    const hasHighlights=ready.some(detail=>!hasDistinctBoxStats(detail.stats));
+    if(hasHighlights){
+      wrap.title='Una X marca box plots colapsados o métricas con valores repetidos.';
+    }else{
+      wrap.removeAttribute('title');
+    }
     wrap.style.display='block';
     priceBoxMetricsChart=new Chart(canvas,{
       type:'scatter',
       data:{
-        datasets:distinct.map(detail=>({
-          label:detail.name,
-          data:[
-            {x:detail.stats.q1,y:detail.name},
-            {x:detail.stats.q3,y:detail.name}
-          ],
-          showLine:true,
-          pointRadius:0,
-          pointHoverRadius:0,
-          pointHitRadius:BOX_IQR_LINE_WIDTH,
-          borderColor:accentColor,
-          backgroundColor:accentColor,
-          borderWidth:BOX_IQR_LINE_WIDTH,
-          borderCapStyle:'round',
-          spanGaps:false,
-          clip:false,
-          segment:{
+        datasets:ready.map(detail=>{
+          const stats=detail.stats;
+          const collapsed=isCollapsedBoxStats(stats);
+          const highlight=!hasDistinctBoxStats(stats);
+          return {
+            label:detail.name,
+            data:[
+              {x:stats.q1,y:detail.name},
+              {x:stats.q3,y:detail.name}
+            ],
+            showLine:true,
+            pointRadius:0,
+            pointHoverRadius:0,
+            pointHitRadius:BOX_IQR_LINE_WIDTH,
             borderColor:accentColor,
+            backgroundColor:accentColor,
             borderWidth:BOX_IQR_LINE_WIDTH,
-            borderCapStyle:'round'
-          }
-        }))
+            borderCapStyle:'round',
+            spanGaps:false,
+            clip:false,
+            segment:{
+              borderColor:accentColor,
+              borderWidth:BOX_IQR_LINE_WIDTH,
+              borderCapStyle:'round'
+            },
+            boxIndicators:{highlight,collapsed,color:accentColor}
+          };
+        })
       },
+      plugins:[boxCollapsedPlugin],
       options:{
         parsing:false,
         responsive:true,
         maintainAspectRatio:false,
         plugins:{
           legend:{display:false},
-          tooltip:{enabled:false}
+          tooltip:{enabled:false},
+          boxCollapsedPlugin:{size:10,collapsedSize:12,lineWidth:2}
         },
         scales:{
           x:{
@@ -916,14 +979,17 @@ function colorForRegionCount(count){
       wrap.style.display='none';
       return;
     }
-    const distinct=enriched.filter(detail=>hasDistinctBoxStats(detail.stats));
-    if(!distinct.length){
+    const ready=enriched.filter(detail=>{
+      const stats=detail?.stats;
+      return stats && Number.isFinite(stats.q1) && Number.isFinite(stats.q3);
+    });
+    if(!ready.length){
       wrap.style.display='none';
       return;
     }
-    const categories=distinct.map(detail=>detail.name);
-    const values=distinct
-      .flatMap(detail=>[detail.stats?.q1,detail.stats?.q3])
+    const categories=ready.map(detail=>detail.name);
+    const values=ready
+      .flatMap(detail=>[detail.stats?.min,detail.stats?.q1,detail.stats?.q3,detail.stats?.max])
       .filter(Number.isFinite);
     if(!values.length){
       wrap.style.display='none';
@@ -956,40 +1022,54 @@ function colorForRegionCount(count){
         return fmtNumber(value);
       }
     };
+    const hasHighlights=ready.some(detail=>!hasDistinctBoxStats(detail.stats));
+    if(hasHighlights){
+      wrap.title='Una X marca box plots colapsados o métricas con valores repetidos.';
+    }else{
+      wrap.removeAttribute('title');
+    }
     wrap.style.display='block';
     ordersBoxMetricsChart=new Chart(canvas,{
       type:'scatter',
       data:{
-        datasets:distinct.map(detail=>({
-          label:detail.name,
-          data:[
-            {x:detail.stats.q1,y:detail.name},
-            {x:detail.stats.q3,y:detail.name}
-          ],
-          showLine:true,
-          pointRadius:0,
-          pointHoverRadius:0,
-          pointHitRadius:BOX_IQR_LINE_WIDTH,
-          borderColor:accent2Color,
-          backgroundColor:accent2Color,
-          borderWidth:BOX_IQR_LINE_WIDTH,
-          borderCapStyle:'round',
-          spanGaps:false,
-          clip:false,
-          segment:{
+        datasets:ready.map(detail=>{
+          const stats=detail.stats;
+          const collapsed=isCollapsedBoxStats(stats);
+          const highlight=!hasDistinctBoxStats(stats);
+          return {
+            label:detail.name,
+            data:[
+              {x:stats.q1,y:detail.name},
+              {x:stats.q3,y:detail.name}
+            ],
+            showLine:true,
+            pointRadius:0,
+            pointHoverRadius:0,
+            pointHitRadius:BOX_IQR_LINE_WIDTH,
             borderColor:accent2Color,
+            backgroundColor:accent2Color,
             borderWidth:BOX_IQR_LINE_WIDTH,
-            borderCapStyle:'round'
-          }
-        }))
+            borderCapStyle:'round',
+            spanGaps:false,
+            clip:false,
+            segment:{
+              borderColor:accent2Color,
+              borderWidth:BOX_IQR_LINE_WIDTH,
+              borderCapStyle:'round'
+            },
+            boxIndicators:{highlight,collapsed,color:accent2Color}
+          };
+        })
       },
+      plugins:[boxCollapsedPlugin],
       options:{
         parsing:false,
         responsive:true,
         maintainAspectRatio:false,
         plugins:{
           legend:{display:false},
-          tooltip:{enabled:false}
+          tooltip:{enabled:false},
+          boxCollapsedPlugin:{size:10,collapsedSize:12,lineWidth:2}
         },
         scales:{
           x:{
