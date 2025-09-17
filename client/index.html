@@ -301,6 +301,8 @@ const borderColorVar = (styles.getPropertyValue('--border') || '#223247').trim()
 const axisGridColor = borderColorVar.startsWith('#') ? `${borderColorVar}66` : 'rgba(34,50,71,0.4)';
 const BOX_TOLERANCE = 1e-9;
 const BOX_IQR_LINE_WIDTH = 14;
+const BOX_X_BASE_MAX_TICKS = 11;
+const BOX_X_TICK_MULTIPLIER = 3;
 
 const bubbleLabelPlugin = {
   id:'bubbleLabelPlugin',
@@ -467,6 +469,44 @@ function hasDistinctBoxStats(stats){
   if(isCollapsedBoxStats(stats)) return false;
   if(nearlyEqual(stats.q1,stats.q3)) return false;
   return true;
+}
+
+function buildBoxPlotScales(categories,minValue,maxValue,formatTick){
+  const createTickOptions=()=>({
+    color:textColor,
+    callback:formatTick,
+    count:BOX_X_BASE_MAX_TICKS*BOX_X_TICK_MULTIPLIER,
+    maxTicksLimit:BOX_X_BASE_MAX_TICKS*BOX_X_TICK_MULTIPLIER
+  });
+  return {
+    x:{
+      position:'bottom',
+      title:{display:true,text:'Valor de la métrica',color:textColor},
+      ticks:createTickOptions(),
+      grid:{color:axisGridColor},
+      border:{color:borderColorVar},
+      min:minValue,
+      max:maxValue
+    },
+    xTop:{
+      position:'top',
+      title:{display:false},
+      ticks:createTickOptions(),
+      grid:{color:axisGridColor,drawOnChartArea:false,drawTicks:true},
+      border:{color:borderColorVar},
+      min:minValue,
+      max:maxValue
+    },
+    y:{
+      type:'category',
+      labels:categories,
+      title:{display:true,text:'Artículo',color:textColor},
+      ticks:{color:textColor},
+      grid:{color:axisGridColor},
+      border:{color:borderColorVar},
+      offset:true
+    }
+  };
 }
 
 function safeLocalStorageGet(key){
@@ -999,23 +1039,7 @@ function colorForRegionCount(count){
           tooltip:{enabled:false},
           boxCollapsedPlugin:{size:10,collapsedSize:12,lineWidth:2}
         },
-        scales:{
-          x:{
-            title:{display:true,text:'Valor de la métrica',color:textColor},
-            ticks:{color:textColor,callback:formatTick},
-            grid:{color:axisGridColor},
-            min:minValue,
-            max:maxValue
-          },
-          y:{
-            type:'category',
-            labels:categories,
-            title:{display:true,text:'Artículo',color:textColor},
-            ticks:{color:textColor},
-            grid:{color:axisGridColor},
-            offset:true
-          }
-        }
+        scales:buildBoxPlotScales(categories,minValue,maxValue,formatTick)
       }
     });
   }
@@ -1134,23 +1158,7 @@ function colorForRegionCount(count){
           tooltip:{enabled:false},
           boxCollapsedPlugin:{size:10,collapsedSize:12,lineWidth:2}
         },
-        scales:{
-          x:{
-            title:{display:true,text:'Valor de la métrica',color:textColor},
-            ticks:{color:textColor,callback:formatTick},
-            grid:{color:axisGridColor},
-            min:minValue,
-            max:maxValue
-          },
-          y:{
-            type:'category',
-            labels:categories,
-            title:{display:true,text:'Artículo',color:textColor},
-            ticks:{color:textColor},
-            grid:{color:axisGridColor},
-            offset:true
-          }
-        }
+        scales:buildBoxPlotScales(categories,minValue,maxValue,formatTick)
       }
     });
   }
