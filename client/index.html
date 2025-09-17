@@ -908,7 +908,14 @@ function colorForRegionCount(count){
     }
     const categories=ready.map(detail=>detail.name);
     const values=ready
-      .flatMap(detail=>[detail.stats?.min,detail.stats?.q1,detail.stats?.q3,detail.stats?.max])
+      .flatMap(detail=>[
+        detail.stats?.lowerFence,
+        detail.stats?.min,
+        detail.stats?.q1,
+        detail.stats?.q3,
+        detail.stats?.max,
+        detail.stats?.upperFence
+      ])
       .filter(Number.isFinite);
     if(!values.length){
       wrap.style.display='none';
@@ -1036,7 +1043,14 @@ function colorForRegionCount(count){
     }
     const categories=ready.map(detail=>detail.name);
     const values=ready
-      .flatMap(detail=>[detail.stats?.min,detail.stats?.q1,detail.stats?.q3,detail.stats?.max])
+      .flatMap(detail=>[
+        detail.stats?.lowerFence,
+        detail.stats?.min,
+        detail.stats?.q1,
+        detail.stats?.q3,
+        detail.stats?.max,
+        detail.stats?.upperFence
+      ])
       .filter(Number.isFinite);
     if(!values.length){
       wrap.style.display='none';
