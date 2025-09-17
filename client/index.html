@@ -408,7 +408,14 @@ const boxMinMaxLinePlugin={
     datasets.forEach((dataset,index)=>{
       const stats=dataset?.boxStats;
       if(!stats) return;
-      if(!Number.isFinite(stats.min)||!Number.isFinite(stats.max)) return;
+      const q1=stats.q1;
+      const q3=stats.q3;
+      const iqr=Number.isFinite(stats.iqr)?stats.iqr:(Number.isFinite(q3)&&Number.isFinite(q1)?(q3-q1):undefined);
+      const lowerFence=Number.isFinite(stats.lowerFence)?stats.lowerFence:(Number.isFinite(q1)&&Number.isFinite(iqr)?(q1-1.5*iqr):undefined);
+      const upperFence=Number.isFinite(stats.upperFence)?stats.upperFence:(Number.isFinite(q3)&&Number.isFinite(iqr)?(q3+1.5*iqr):undefined);
+      const startValue=Number.isFinite(lowerFence)?lowerFence:(Number.isFinite(stats.min)?stats.min:q1);
+      const endValue=Number.isFinite(upperFence)?upperFence:(Number.isFinite(stats.max)?stats.max:q3);
+      if(!Number.isFinite(startValue)||!Number.isFinite(endValue)) return;
       if(isCollapsedBoxStats(stats)) return;
       const meta=chart.getDatasetMeta(index);
       if(!meta) return;
@@ -425,8 +432,8 @@ const boxMinMaxLinePlugin={
         }
       }
       if(!position||!Number.isFinite(position.y)) return;
-      const xMin=xScale.getPixelForValue(stats.min);
-      const xMax=xScale.getPixelForValue(stats.max);
+      const xMin=xScale.getPixelForValue(startValue);
+      const xMax=xScale.getPixelForValue(endValue);
       if(!Number.isFinite(xMin)||!Number.isFinite(xMax)) return;
       ctx.save();
       ctx.lineWidth=lineWidth;
