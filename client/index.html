@@ -170,6 +170,9 @@
           <tbody></tbody>
         </table>
       </div>
+      <div id="ordersBoxChartWrap" style="display:none;margin:16px 0;border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--panel)">
+        <canvas id="chartOrdersBoxMetrics" style="width:100%;height:360px"></canvas>
+      </div>
     </div>
     <canvas id="chartScatter"></canvas>
     <p id="chartScatterNote" class="note" style="display:none"></p>
@@ -473,6 +476,7 @@ let currentSort={k:"type_name",dir:1};
 let charts={};
 let stargateBubbleChart=null;
 let priceBoxMetricsChart=null;
+let ordersBoxMetricsChart=null;
 const chartIds=['chartVol','chartVolBottom','chartVal','chartValBottom','chartOrders','chartOrdersBottom','chartScatter','chartAge'];
 
 function removeTopPriceSummaryTables(){
@@ -792,6 +796,100 @@ function colorForRegionCount(count){
       }
     });
   }
+  function updateOrdersBoxChart(enriched=[],metrics=[]){
+    const wrap=j('#ordersBoxChartWrap');
+    const canvas=j('#chartOrdersBoxMetrics');
+    if(!wrap||!canvas) return;
+    if(ordersBoxMetricsChart){ ordersBoxMetricsChart.destroy(); ordersBoxMetricsChart=null; }
+    if(!enriched.length){
+      wrap.style.display='none';
+      return;
+    }
+    const chartMetrics=(metrics||[]).filter(metric=>metric&&metric.chart!==false);
+    if(!chartMetrics.length){
+      wrap.style.display='none';
+      return;
+    }
+    const categories=enriched.map(detail=>detail.name);
+    const values=[];
+    chartMetrics.forEach(metric=>{
+      enriched.forEach(detail=>{
+        const raw=metric.getValue(detail.stats);
+        if(Number.isFinite(raw)) values.push(raw);
+      });
+    });
+    if(!values.length){
+      wrap.style.display='none';
+      return;
+    }
+    const baseMin=Math.min(...values);
+    const baseMax=Math.max(...values);
+    let minValue=baseMin;
+    let maxValue=baseMax;
+    if(minValue===maxValue){
+      const pad=Math.abs(minValue||1)*0.1;
+      minValue-=pad;
+      maxValue+=pad;
+    } else {
+      const pad=(maxValue-minValue)*0.05;
+      minValue-=pad;
+      maxValue+=pad;
+    }
+    if(baseMin>=0 && minValue<0) minValue=0;
+    if(minValue===maxValue){
+      maxValue=minValue+1;
+    }
+    const primaryFormatter=chartMetrics.find(metric=>typeof metric.format==='function')?.format;
+    const formatTick=value=>{
+      if(!Number.isFinite(value)) return value;
+      try{
+        const formatted=primaryFormatter?primaryFormatter(value):fmtNumber(value);
+        return typeof formatted==='string'?formatted:fmtNumber(value);
+      }catch(e){
+        return fmtNumber(value);
+      }
+    };
+    wrap.style.display='block';
+    ordersBoxMetricsChart=new Chart(canvas,{
+      type:'scatter',
+      data:{
+        datasets:[{
+          data:[],
+          showLine:false,
+          pointRadius:0,
+          pointHoverRadius:0,
+          borderWidth:0,
+          backgroundColor:'transparent'
+        }]
+      },
+      options:{
+        parsing:false,
+        responsive:true,
+        maintainAspectRatio:false,
+        plugins:{
+          legend:{display:false},
+          tooltip:{enabled:false}
+        },
+        scales:{
+          x:{
+            title:{display:true,text:'Valor de la métrica',color:textColor},
+            ticks:{color:textColor,callback:formatTick},
+            grid:{color:axisGridColor},
+            min:minValue,
+            max:maxValue
+          },
+          y:{
+            type:'category',
+            labels:categories,
+            title:{display:true,text:'Artículo',color:textColor},
+            ticks:{color:textColor},
+            grid:{color:axisGridColor},
+            offset:true
+          }
+        }
+      }
+    });
+  }
   function computeQuantile(sorted,q){
   if(!sorted.length) return NaN;
   const pos=(sorted.length-1)*q;
@@ -874,6 +972,7 @@ function updateBoxPlotTables(priceDetails=[],orderDetails=[]){
   const priceResult=renderTable(priceTable,priceWrap,priceDetails,fmtPrice);
   const ordersResult=renderTable(ordersTable,ordersWrap,orderDetails,fmtNumber);
   updatePriceBoxChart(priceResult.enriched,priceResult.metrics);
+  updateOrdersBoxChart(ordersResult.enriched,ordersResult.metrics);
   if(priceResult.visible||ordersResult.visible){
     container.style.display='grid';
     container.style.gridTemplateColumns='1fr';
