@@ -401,11 +401,32 @@ function clearCache(){
 window.clearEsiCache=clearCache;
 
 async function fetchWithRetry(url, opts = {}, maxRetries = 3) {
-  opts.headers = { ...(opts.headers || {}), "User-Agent": USER_AGENT };
+  const finalOpts = { ...opts };
+  if (typeof Headers !== "undefined") {
+    const headers = new Headers(opts.headers || {});
+    if (!headers.has("Accept-Language")) headers.set("Accept-Language", "en");
+    const isBrowser = typeof window !== "undefined" && typeof window.document !== "undefined";
+    if (isBrowser) {
+      headers.delete("User-Agent");
+    } else if (!headers.has("User-Agent")) {
+      headers.set("User-Agent", USER_AGENT);
+    }
+    finalOpts.headers = headers;
+  } else {
+    const headers = { ...(opts.headers || {}) };
+    if (!("Accept-Language" in headers)) headers["Accept-Language"] = "en";
+    const hasWindow = typeof window !== "undefined" && typeof window.document !== "undefined";
+    if (hasWindow) {
+      delete headers["User-Agent"];
+    } else if (!("User-Agent" in headers)) {
+      headers["User-Agent"] = USER_AGENT;
+    }
+    finalOpts.headers = headers;
+  }
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     let res;
     try {
-      res = await fetch(url, opts);
+      res = await fetch(url, finalOpts);
     } catch (err) {
       if (LOG_ESI) logError(`[ESI] fetch error ${url} (try ${attempt}/${maxRetries}):`, err);
       if (attempt === maxRetries) throw err;
