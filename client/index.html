@@ -406,7 +406,7 @@ const boxMinMaxLinePlugin={
     datasets.forEach((dataset,index)=>{
       const stats=dataset?.boxStats;
       if(!stats) return;
-      if(!Number.isFinite(stats.lowerFence)||!Number.isFinite(stats.upperFence)) return;
+      if(!Number.isFinite(stats.min)||!Number.isFinite(stats.max)) return;
       if(isCollapsedBoxStats(stats)) return;
       const meta=chart.getDatasetMeta(index);
       if(!meta) return;
@@ -423,8 +423,8 @@ const boxMinMaxLinePlugin={
         }
       }
       if(!position||!Number.isFinite(position.y)) return;
-      const xMin=xScale.getPixelForValue(stats.lowerFence);
-      const xMax=xScale.getPixelForValue(stats.upperFence);
+      const xMin=xScale.getPixelForValue(stats.min);
+      const xMax=xScale.getPixelForValue(stats.max);
       if(!Number.isFinite(xMin)||!Number.isFinite(xMax)) return;
       ctx.save();
       ctx.lineWidth=lineWidth;
