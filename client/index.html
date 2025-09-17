@@ -189,6 +189,7 @@
         </div>
         <div class="right">
           <button id="chartsBtn" class="btn" disabled>Generar gráficas</button>
+          <button id="connectedOrdersBtn" class="btn" disabled>Constelaciones destino</button>
           <button id="exportBtn" class="btn" disabled>Exportar CSV</button>
         </div>
       </div>
@@ -250,6 +251,7 @@
         </table>
       </div>
       <p id="systemNote" class="note" style="display:none"></p>
+      <p id="connectedNote" class="note" style="display:none"></p>
     </div>
   </div>
 
@@ -690,6 +692,8 @@ let regions=[],constellations=[],systems=[],stargates=[];
 let stationsInConstellation=new Set();
 let stationToSystem=new Map();
 let systemNameMap=new Map();
+let baseOrdersRaw=[];
+let connectedOrdersRaw=[];
 let ordersRaw=[];
 let nameCache=new Map();
 let currentSort={k:"type_name",dir:1};
@@ -698,6 +702,69 @@ let stargateBubbleChart=null;
 let priceBoxMetricsChart=null;
 let ordersBoxMetricsChart=null;
 const chartIds=['chartVol','chartVolBottom','chartVal','chartValBottom','chartOrders','chartOrdersBottom','chartScatter','chartAge'];
+let chartsReady=false;
+let loadingConnectedOrders=false;
+
+function syncOrdersRaw(){
+  ordersRaw = baseOrdersRaw.concat(connectedOrdersRaw);
+}
+
+function hideConnectedNote(){
+  const note=j('#connectedNote');
+  if(note){
+    note.style.display='none';
+    note.textContent='';
+  }
+}
+
+function showConnectedNote(summaryText){
+  const note=j('#connectedNote');
+  if(note){
+    if(summaryText){
+      note.innerHTML=summaryText;
+      note.style.display='block';
+    }else{
+      hideConnectedNote();
+    }
+  }
+}
+
+function updateConnectedButtonState(){
+  const btn=j('#connectedOrdersBtn');
+  if(!btn) return;
+  if(loadingConnectedOrders){
+    btn.textContent='Cargando constelaciones…';
+    btn.disabled=true;
+    return;
+  }
+  btn.textContent='Constelaciones destino';
+  const hasBase=baseOrdersRaw.length>0;
+  btn.disabled=!hasBase || !chartsReady;
+}
+
+function refreshSystemFilter(){
+  const sysSel=j('#fSystem');
+  if(!sysSel) return;
+  const systemOptions=new Map();
+  for(const order of ordersRaw){
+    let sysId=stationToSystem.get(order.location_id);
+    if(sysId==null && typeof order.system_id==='number') sysId=order.system_id;
+    if(sysId==null) continue;
+    const name=systemNameMap.get(sysId)||sysId;
+    if(!systemOptions.has(sysId)) systemOptions.set(sysId,name);
+  }
+  sysSel.innerHTML=`<option value="all">Todos</option>` + [...systemOptions.entries()].map(([id,name])=>`<option value="${id}">${escapeHtml(name)}</option>`).join("");
+}
+
+function refreshStationFilter(){
+  const stSel=j('#fStation');
+  if(!stSel) return;
+  const stationOptions=[...new Set(ordersRaw.map(o=>o.location_id))].map(id=>{
+    const label=nameCache.get(id)||id;
+    return `<option value="${id}">${escapeHtml(label)}</option>`;
+  }).join("");
+  stSel.innerHTML=`<option value="all">Todas</option>` + stationOptions;
+}
 
 function removeTopPriceSummaryTables(){
   if(typeof document==='undefined') return;
@@ -802,7 +869,7 @@ async function onConstellationChange(){
   if(cached &&
      cached.systems &&
      cached.stargates &&
-     (cached.stargates.length===0 || cached.stargates[0].destConstellation) &&
+     (cached.stargates.length===0 || cached.stargates.every(g=>g && g.destConstellation && typeof g.destSystemId==="number")) &&
      cached.systems[0] &&
      cached.systems[0].pos &&
      cached.systems.every(s=>typeof s.gatesSameRegion==="number" && typeof s.gatesOtherRegion==="number" && typeof s.totalStargates==="number" && typeof s.otherConstellationGates==="number")){
@@ -858,7 +925,7 @@ async function onConstellationChange(){
         const destName=dest.name||destId;
         const destConstName=cons.name||dest.constellation_id;
         const destGateId=gate.destination?.stargate_id || gId;
-        stargates.push({sourceSystemId:s.id, sourceSystem:s.name, gateName:gate.name||gId, id:destGateId, destSystem:destName, destConstellation:destConstName, destConstellationId:dest.constellation_id, destRegion, destRegionId:cons.region_id});
+        stargates.push({sourceSystemId:s.id, sourceSystem:s.name, gateName:gate.name||gId, id:destGateId, destSystem:destName, destSystemId:destId, destConstellation:destConstName, destConstellationId:dest.constellation_id, destRegion, destRegionId:cons.region_id});
       }
     }
     s.gatesSameRegion=gw; s.gatesOtherRegion=go; s.otherConstellationGates=otherConstellationGates;
@@ -874,31 +941,84 @@ async function onConstellationChange(){
   j('#queryBtn').disabled=false;
   setCache(cacheKey,{systems,stationMap:[...stationToSystem.entries()],stargates});
 }
-function resetLower(){ j('#constellation').disabled=true; j('#constellation').innerHTML=''; j('#queryBtn').disabled=true; stationsInConstellation=new Set(); stationToSystem=new Map(); systemNameMap=new Map(); systems=[]; stargates=[]; ordersRaw=[]; renderSystemsTable(); renderStargatesTable(); render(); }
+function resetLower(){
+  j('#constellation').disabled=true;
+  j('#constellation').innerHTML='';
+  j('#queryBtn').disabled=true;
+  stationsInConstellation=new Set();
+  stationToSystem=new Map();
+  systemNameMap=new Map();
+  systems=[];
+  stargates=[];
+  baseOrdersRaw=[];
+  connectedOrdersRaw=[];
+  syncOrdersRaw();
+  chartsReady=false;
+  loadingConnectedOrders=false;
+  hideConnectedNote();
+  refreshSystemFilter();
+  refreshStationFilter();
+  renderSystemsTable();
+  renderStargatesTable();
+  render();
+  updateConnectedButtonState();
+}
 
 async function queryMarket(){
   const regionId=+j('#region').value;
   try{
+    chartsReady=false;
+    connectedOrdersRaw=[];
+    baseOrdersRaw=[];
+    syncOrdersRaw();
+    hideConnectedNote();
+    updateConnectedButtonState();
     j('#systemNote').style.display='none';
-    if(!stationsInConstellation.size){ j('#systemNote').style.display='block'; j('#systemNote').innerHTML='<span class="danger">Esta constelación no tiene estaciones NPC públicas.</span> ESI no expone órdenes de estructuras sin autenticación.'; ordersRaw=[]; render(); return; }
-    ordersRaw=[]; j('#busyHint').style.display='flex';
+    if(!stationsInConstellation.size){
+      j('#systemNote').style.display='block';
+      j('#systemNote').innerHTML='<span class="danger">Esta constelación no tiene estaciones NPC públicas.</span> ESI no expone órdenes de estructuras sin autenticación.';
+      render();
+      return;
+    }
+    j('#busyHint').style.display='flex';
     const orderType='all';
     const first=await throttleEsiCall(()=>get(`${ESI}/markets/${regionId}/orders/?order_type=${orderType}&page=1`));
     const totalPages=first.pages||1; filterAndPush(first.data); j('#pagesInfo').textContent=`1 / ${totalPages} páginas`;
     for(let p=2;p<=totalPages;p++){ const {data}=await throttleEsiCall(()=>get(`${ESI}/markets/${regionId}/orders/?order_type=${orderType}&page=${p}`)); filterAndPush(data); j('#pagesInfo').textContent=`${p} / ${totalPages} páginas`; }
     j('#busyHint').style.display='none';
     const ids=new Set(); for(const o of ordersRaw){ ids.add(o.type_id); ids.add(o.location_id);} if(ids.size){ const arr=[...ids]; const chunk=900; for(let i=0;i<arr.length;i+=chunk){ const names=await throttleEsiCall(()=>post(`${ESI}/universe/names/`,arr.slice(i,i+chunk))); for(const n of names){ nameCache.set(n.id,n.name);} }}
-    const stSel=j('#fStation'); stSel.innerHTML=`<option value="all">Todas</option>` + [...new Set(ordersRaw.map(o=>o.location_id))].map(id=>`<option value="${id}">${nameCache.get(id)||id}</option>`).join("");
+    refreshSystemFilter();
+    refreshStationFilter();
     render();
   }catch(err){ logError(err); j('#busyHint').style.display='none'; alert('Fallo al consultar ESI. Revisa conexión o intenta con otra región.'); }
 }
-function filterAndPush(arr){ for(const o of arr){ if(stationsInConstellation.has(o.location_id)) ordersRaw.push(o); } }
+function filterAndPush(arr){
+  let pushed=false;
+  for(const o of arr){
+    if(stationsInConstellation.has(o.location_id)){
+      baseOrdersRaw.push(o);
+      pushed=true;
+    }
+  }
+  if(pushed) syncOrdersRaw();
+}
 
 function currentFilters(){ return { type:j('#fType').value.trim().toLowerCase(), side:j('#fSide').value, pmin:parseFloat(j('#fPriceMin').value||'NaN'), pmax:parseFloat(j('#fPriceMax').value||'NaN'), vmin:parseInt(j('#fVolMin').value||'NaN'), vmax:parseInt(j('#fVolMax').value||'NaN'), mmin:parseInt(j('#fMinMin').value||'NaN'), mmax:parseInt(j('#fMinMax').value||'NaN'), range:j('#fRange').value, system:j('#fSystem').value, station:j('#fStation').value, issued:j('#fIssued').value, duration:j('#fDuration').value }; }
 function mapOrder(o){ const sysId=stationToSystem.get(o.location_id); return { type_id:o.type_id, type_name:nameCache.get(o.type_id)||o.type_id, order_type:o.is_buy_order?'buy':'sell', price:o.price, volume_remain:o.volume_remain, min_volume:o.min_volume, range:o.range, station_id:o.location_id, station_name:nameCache.get(o.location_id)||o.location_id, system_id:sysId, system_name:systemNameMap.get(sysId)||sysId, issued:o.issued, duration:o.duration }; }
 function applyFilters(rows,f){ return rows.filter(r=>{ if(f.type&&!(""+r.type_name).toLowerCase().includes(f.type))return false; if(f.side!=='all'&&r.order_type!==f.side)return false; if(!Number.isNaN(f.pmin)&&r.price<f.pmin)return false; if(!Number.isNaN(f.pmax)&&r.price>f.pmax)return false; if(!Number.isNaN(f.vmin)&&r.volume_remain<f.vmin)return false; if(!Number.isNaN(f.vmax)&&r.volume_remain>f.vmax)return false; if(!Number.isNaN(f.mmin)&&r.min_volume<f.mmin)return false; if(!Number.isNaN(f.mmax)&&r.min_volume>f.mmax)return false; if(f.range!=='all'&&(""+r.range)!==f.range)return false; if(f.system!=='all'&&(""+r.system_id)!==f.system)return false; if(f.station!=='all'&&(""+r.station_id)!==f.station)return false; if(f.issued!=='all'){ const d=isoDaysAgo(r.issued); if(f.issued==='24h'&&d>1)return false; if(f.issued==='7d'&&d>7)return false; if(f.issued==='30d'&&d>30)return false;} if(f.duration!=='all'&&(""+r.duration)!==(f.duration))return false; return true; }); }
 function getFilteredRows(){ let rows=ordersRaw.map(mapOrder); const f=currentFilters(); rows=applyFilters(rows,f); return sortBy(rows,currentSort.k,currentSort.dir); }
-function render(){ const tbody=j('#ordersTable tbody'); const rows=getFilteredRows(); j('#ordersCount').textContent=fmtInt(rows.length); if(!ordersRaw.length) j('#pagesInfo').textContent='0 / 0 páginas'; const disable=rows.length===0; j('#exportBtn').disabled=disable; j('#chartsBtn').disabled=disable; tbody.innerHTML=rows.map(r=>`<tr><td>${escapeHtml(r.type_name)}</td><td>${r.order_type==='sell'?'Venta':'Compra'}</td><td>${fmtPrice(r.price)}</td><td>${fmtInt(r.volume_remain)}</td><td>${fmtInt(r.min_volume)}</td><td>${r.range}</td><td>${escapeHtml(r.system_name)}</td><td>${escapeHtml(r.station_name)}</td><td><span class="muted" title="${r.issued}">${new Date(r.issued).toLocaleString("es-MX")}</span></td><td>${r.duration}</td></tr>`).join(''); updateStargateBubble(rows); }
+function render(){
+  const tbody=j('#ordersTable tbody');
+  const rows=getFilteredRows();
+  j('#ordersCount').textContent=fmtInt(rows.length);
+  if(!ordersRaw.length) j('#pagesInfo').textContent='0 / 0 páginas';
+  const disable=rows.length===0;
+  j('#exportBtn').disabled=disable;
+  j('#chartsBtn').disabled=disable;
+  tbody.innerHTML=rows.map(r=>`<tr><td>${escapeHtml(r.type_name)}</td><td>${r.order_type==='sell'?'Venta':'Compra'}</td><td>${fmtPrice(r.price)}</td><td>${fmtInt(r.volume_remain)}</td><td>${fmtInt(r.min_volume)}</td><td>${r.range}</td><td>${escapeHtml(r.system_name)}</td><td>${escapeHtml(r.station_name)}</td><td><span class="muted" title="${r.issued}">${new Date(r.issued).toLocaleString("es-MX")}</span></td><td>${r.duration}</td></tr>`).join('');
+  updateConnectedButtonState();
+  updateStargateBubble(rows);
+}
 function renderSystemsTable(){ const wrap=j('#systemsTableWrap'); const body=j('#systemsTable tbody'); if(!wrap||!body) return; if(systems.length){ body.innerHTML=systems.map(s=>`<tr><td>${escapeHtml(s.name)}</td><td>${s.id}</td><td>${fmtInt(s.totalStargates||0)}</td><td>${fmtInt(s.gatesOtherRegion||0)}</td><td>${fmtInt(s.otherConstellationGates||0)}</td></tr>`).join(''); wrap.style.display='block'; }else{ wrap.style.display='none'; }}
 function renderStargatesTable(){ const wrap=j('#stargatesTableWrap'); const body=j('#stargatesTable tbody'); if(!wrap||!body) return; if(stargates.length){ body.innerHTML=stargates.map(g=>`<tr><td>${g.sourceSystem}</td><td>${g.gateName}</td><td>${g.id||''}</td><td>${g.destSystem}</td><td>${g.destConstellation}</td><td>${g.destRegion}</td></tr>`).join(''); wrap.style.display='block'; }else{ wrap.style.display='none'; }}
 function computeDestinationCounts(){
@@ -1614,6 +1734,147 @@ function generateCharts(){
     } else {
       showChartNote('chartAge','No hay datos suficientes para esta gráfica.');
     }
+  chartsReady=true;
+  updateConnectedButtonState();
+}
+
+async function loadConnectedConstellationOrders(){
+  if(loadingConnectedOrders) return;
+  if(!baseOrdersRaw.length){ alert('Consulta primero el mercado de la constelación origen.'); return; }
+  if(!chartsReady){ alert('Genera las gráficas antes de consultar constelaciones destino.'); return; }
+  loadingConnectedOrders=true;
+  updateConnectedButtonState();
+  try{
+    const prevConnectedCount=connectedOrdersRaw.length;
+    const sourceConsId=+j('#constellation').value;
+    const destinationMap=new Map();
+    for(const gate of stargates){
+      if(!gate) continue;
+      const destConstId=gate.destConstellationId;
+      if(!destConstId || destConstId===sourceConsId) continue;
+      let entry=destinationMap.get(destConstId);
+      if(!entry){
+        entry={id:destConstId,name:gate.destConstellation||String(destConstId),regionId:gate.destRegionId,systemIds:new Set(),stationIds:new Set()};
+        destinationMap.set(destConstId,entry);
+      }
+      if(typeof gate.destSystemId==='number') entry.systemIds.add(gate.destSystemId);
+    }
+    if(!destinationMap.size){
+      connectedOrdersRaw=[];
+      syncOrdersRaw();
+      if(prevConnectedCount!==connectedOrdersRaw.length) chartsReady=false;
+      refreshSystemFilter();
+      refreshStationFilter();
+      render();
+      showConnectedNote('<strong>Constelaciones destino consultadas:</strong> Ninguna. No se encontraron stargates hacia otras constelaciones.');
+      return;
+    }
+    const validEntries=[];
+    for(const entry of destinationMap.values()){
+      let consData=null;
+      try{ consData=await getConstellationCached(entry.id); }
+      catch(e){ logError(e); }
+      if(consData){
+        if(consData.name) entry.name=consData.name;
+        if(Number.isFinite(consData.region_id)) entry.regionId=consData.region_id;
+        if(Array.isArray(consData.systems)) consData.systems.forEach(id=>entry.systemIds.add(id));
+      }
+      const regionIdNum=Number(entry.regionId);
+      if(Number.isFinite(regionIdNum)) entry.regionId=regionIdNum;
+      for(const sysId of entry.systemIds){
+        try{
+          const sysData=await getSystemCached(sysId);
+          if(sysData?.name) systemNameMap.set(sysId,sysData.name);
+          const stations=sysData?.stations||[];
+          for(const stationId of stations){
+            entry.stationIds.add(stationId);
+            stationToSystem.set(stationId,sysId);
+          }
+        }catch(e){ logError(e); }
+      }
+      if(entry.stationIds.size && Number.isFinite(entry.regionId)){
+        validEntries.push(entry);
+      }
+    }
+    if(!validEntries.length){
+      connectedOrdersRaw=[];
+      syncOrdersRaw();
+      if(prevConnectedCount!==connectedOrdersRaw.length) chartsReady=false;
+      refreshSystemFilter();
+      refreshStationFilter();
+      render();
+      showConnectedNote('<strong>Constelaciones destino consultadas:</strong> Ninguna con estaciones NPC públicas disponibles.');
+      return;
+    }
+    const regionGroups=new Map();
+    validEntries.forEach(entry=>{
+      let group=regionGroups.get(entry.regionId);
+      if(!group){
+        group={regionId:entry.regionId,stationIds:new Set(),stationToConst:new Map(),constellations:[]};
+        regionGroups.set(entry.regionId,group);
+      }
+      group.constellations.push(entry);
+      entry.stationIds.forEach(stationId=>{
+        group.stationIds.add(stationId);
+        group.stationToConst.set(stationId,entry);
+      });
+    });
+    const fetchedOrders=[];
+    for(const group of regionGroups.values()){
+      const regionId=group.regionId;
+      const orderType='all';
+      let page=1;
+      let totalPages=1;
+      do{
+        let result;
+        try{ result=await throttleEsiCall(()=>get(`${ESI}/markets/${regionId}/orders/?order_type=${orderType}&page=${page}`)); }
+        catch(e){ logError(e); break; }
+        const {data,pages}=result;
+        totalPages=pages||totalPages;
+        for(const order of data){
+          if(!group.stationIds.has(order.location_id)) continue;
+          const entry=group.stationToConst.get(order.location_id);
+          if(!entry) continue;
+          fetchedOrders.push({...order,__constellationId:entry.id,__constellationName:entry.name});
+        }
+        page++;
+      }while(page<=totalPages);
+    }
+    connectedOrdersRaw=fetchedOrders;
+    syncOrdersRaw();
+    if(prevConnectedCount!==connectedOrdersRaw.length || connectedOrdersRaw.length>0) chartsReady=false;
+    const ids=new Set();
+    connectedOrdersRaw.forEach(o=>{
+      ids.add(o.type_id);
+      ids.add(o.location_id);
+      if(o.system_id && !systemNameMap.has(o.system_id)) systemNameMap.set(o.system_id,o.system_id);
+    });
+    const missing=[...ids].filter(id=>id!=null && !nameCache.has(id));
+    for(let i=0;i<missing.length;i+=900){
+      const slice=missing.slice(i,i+900);
+      if(!slice.length) continue;
+      try{
+        const names=await throttleEsiCall(()=>post(`${ESI}/universe/names/`,slice));
+        for(const n of names){ nameCache.set(n.id,n.name); }
+      }catch(e){ logError(e); }
+    }
+    refreshSystemFilter();
+    refreshStationFilter();
+    render();
+    const orderCounts=new Map();
+    connectedOrdersRaw.forEach(o=>{
+      const key=o.__constellationId;
+      if(key==null) return;
+      orderCounts.set(key,(orderCounts.get(key)||0)+1);
+    });
+    const summary=validEntries.map(entry=>`${escapeHtml(entry.name)} (${fmtInt(orderCounts.get(entry.id)||0)} órdenes)`).join(', ');
+    const total=fmtInt(connectedOrdersRaw.length);
+    const suffix=connectedOrdersRaw.length?' Vuelve a generar las gráficas para incluir estos datos.':'';
+    showConnectedNote(`<strong>Constelaciones destino consultadas:</strong> ${summary || '—'}. Total de órdenes agregadas: ${total}.${suffix}`);
+  }finally{
+    loadingConnectedOrders=false;
+    updateConnectedButtonState();
+  }
 }
 
 j('#region').addEventListener('change',onRegionChange);
@@ -1621,6 +1882,7 @@ j('#constellation').addEventListener('change',onConstellationChange);
 j('#queryBtn').addEventListener('click',queryMarket);
 j('#exportBtn').addEventListener('click',exportCSV);
 j('#chartsBtn').addEventListener('click',generateCharts);
+j('#connectedOrdersBtn').addEventListener('click',loadConnectedConstellationOrders);
 for(const id of ['fType','fSide','fPriceMin','fPriceMax','fVolMin','fVolMax','fMinMin','fMinMax','fRange','fSystem','fStation','fIssued','fDuration']){ j('#'+id).addEventListener('input',render); j('#'+id).addEventListener('change',render); }
 document.querySelectorAll('thead tr.head th.sortable').forEach(th=>{ th.addEventListener('click',()=>{ const k=th.dataset.k; if(!k) return; if(currentSort.k===k){ currentSort.dir*=-1; } else { currentSort.k=k; currentSort.dir=1; } render(); }); });
 
