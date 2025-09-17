@@ -299,6 +299,7 @@ const mutedColor = (styles.getPropertyValue('--muted') || '#8aa0b3').trim() || '
 const textColor = (styles.getPropertyValue('--text') || '#e6eef7').trim() || '#e6eef7';
 const borderColorVar = (styles.getPropertyValue('--border') || '#223247').trim() || '#223247';
 const axisGridColor = borderColorVar.startsWith('#') ? `${borderColorVar}66` : 'rgba(34,50,71,0.4)';
+const BOX_TOLERANCE = 1e-9;
 
 const bubbleLabelPlugin = {
   id:'bubbleLabelPlugin',
@@ -348,6 +349,20 @@ function fitBarHeight(canvas, count, factor=1){
   const minHeight=160*factor;
   const h=Math.max(minHeight, count*32*factor);
   canvas.style.height=h+'px';
+}
+
+function nearlyEqual(a,b,epsilon=BOX_TOLERANCE){
+  if(!Number.isFinite(a) || !Number.isFinite(b)) return false;
+  if(a===b) return true;
+  const scale=Math.max(1,Math.abs(a),Math.abs(b));
+  return Math.abs(a-b) <= epsilon * scale;
+}
+
+function isCollapsedBoxStats(stats){
+  if(!stats) return false;
+  const values=[stats.min,stats.q1,stats.median,stats.q3,stats.max];
+  if(!values.every(Number.isFinite)) return false;
+  return values.every(v=>nearlyEqual(v,values[0]));
 }
 
 const LOG_ESI = (() => {
@@ -725,14 +740,15 @@ function colorForRegionCount(count){
       wrap.style.display='none';
       return;
     }
-    const categories=enriched.map(detail=>detail.name);
-    const values=[];
-    chartMetrics.forEach(metric=>{
-      enriched.forEach(detail=>{
-        const raw=metric.getValue(detail.stats);
-        if(Number.isFinite(raw)) values.push(raw);
-      });
-    });
+    const collapsed=enriched.filter(detail=>isCollapsedBoxStats(detail.stats));
+    if(!collapsed.length){
+      wrap.style.display='none';
+      return;
+    }
+    const categories=collapsed.map(detail=>detail.name);
+    const values=collapsed
+      .map(detail=>detail.stats?.min)
+      .filter(Number.isFinite);
     if(!values.length){
       wrap.style.display='none';
       return;
@@ -767,7 +783,20 @@ function colorForRegionCount(count){
     wrap.style.display='block';
     priceBoxMetricsChart=new Chart(canvas,{
       type:'scatter',
-      data:{datasets:[]},
+      data:{
+        datasets:[{
+          label:'Valores constantes',
+          data:collapsed.map(detail=>({x:detail.stats.min,y:detail.name})),
+          pointStyle:'cross',
+          pointRadius:6,
+          pointHoverRadius:6,
+          pointBorderWidth:1.5,
+          pointBorderColor:accentColor,
+          pointBackgroundColor:accentColor,
+          showLine:false,
+          hitRadius:6
+        }]
+      },
       options:{
         parsing:false,
         responsive:true,
@@ -810,14 +839,15 @@ function colorForRegionCount(count){
       wrap.style.display='none';
       return;
     }
-    const categories=enriched.map(detail=>detail.name);
-    const values=[];
-    chartMetrics.forEach(metric=>{
-      enriched.forEach(detail=>{
-        const raw=metric.getValue(detail.stats);
-        if(Number.isFinite(raw)) values.push(raw);
-      });
-    });
+    const collapsed=enriched.filter(detail=>isCollapsedBoxStats(detail.stats));
+    if(!collapsed.length){
+      wrap.style.display='none';
+      return;
+    }
+    const categories=collapsed.map(detail=>detail.name);
+    const values=collapsed
+      .map(detail=>detail.stats?.min)
+      .filter(Number.isFinite);
     if(!values.length){
       wrap.style.display='none';
       return;
@@ -854,12 +884,16 @@ function colorForRegionCount(count){
       type:'scatter',
       data:{
         datasets:[{
-          data:[],
+          label:'Valores constantes',
+          data:collapsed.map(detail=>({x:detail.stats.min,y:detail.name})),
+          pointStyle:'cross',
+          pointRadius:6,
+          pointHoverRadius:6,
+          pointBorderWidth:1.5,
+          pointBorderColor:accent2Color,
+          pointBackgroundColor:accent2Color,
           showLine:false,
-          pointRadius:0,
-          pointHoverRadius:0,
-          borderWidth:0,
-          backgroundColor:'transparent'
+          hitRadius:6
         }]
       },
       options:{
