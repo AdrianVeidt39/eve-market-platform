@@ -393,6 +393,51 @@ const boxCollapsedPlugin={
   }
 };
 
+const boxMinMaxLinePlugin={
+  id:'boxMinMaxLinePlugin',
+  afterDatasetsDraw(chart){
+    const ctx=chart.ctx;
+    const datasets=chart.data?.datasets||[];
+    const xScale=chart.scales?.x;
+    if(!ctx||!datasets.length||!xScale||typeof xScale.getPixelForValue!=='function') return;
+    const defaultFontSize=(Chart.defaults?.font?.size)||12;
+    const tickFontSize=chart.options?.scales?.y?.ticks?.font?.size;
+    const lineWidth=Math.max(0.5,(tickFontSize??defaultFontSize)/4);
+    datasets.forEach((dataset,index)=>{
+      const stats=dataset?.boxStats;
+      if(!stats) return;
+      if(!Number.isFinite(stats.lowerFence)||!Number.isFinite(stats.upperFence)) return;
+      if(isCollapsedBoxStats(stats)) return;
+      const meta=chart.getDatasetMeta(index);
+      if(!meta) return;
+      let position=null;
+      for(const element of meta.data||[]){
+        if(!element||element.skip) continue;
+        if(typeof element.tooltipPosition==='function'){
+          const pos=element.tooltipPosition();
+          if(Number.isFinite(pos?.y)){ position=pos; break; }
+        }
+        if(typeof element.getCenterPoint==='function'){
+          const pos=element.getCenterPoint();
+          if(Number.isFinite(pos?.y)){ position=pos; break; }
+        }
+      }
+      if(!position||!Number.isFinite(position.y)) return;
+      const xMin=xScale.getPixelForValue(stats.lowerFence);
+      const xMax=xScale.getPixelForValue(stats.upperFence);
+      if(!Number.isFinite(xMin)||!Number.isFinite(xMax)) return;
+      ctx.save();
+      ctx.lineWidth=lineWidth;
+      ctx.strokeStyle=dataset?.minMaxLineColor||dataset?.borderColor||'#fff';
+      ctx.beginPath();
+      ctx.moveTo(xMin,position.y);
+      ctx.lineTo(xMax,position.y);
+      ctx.stroke();
+      ctx.restore();
+    });
+  }
+};
+
 Chart.defaults.color = '#fff';
 
 function fitBarHeight(canvas, count, factor=1){
@@ -863,7 +908,14 @@ function colorForRegionCount(count){
     }
     const categories=ready.map(detail=>detail.name);
     const values=ready
-      .flatMap(detail=>[detail.stats?.min,detail.stats?.q1,detail.stats?.q3,detail.stats?.max])
+      .flatMap(detail=>[
+        detail.stats?.lowerFence,
+        detail.stats?.min,
+        detail.stats?.q1,
+        detail.stats?.q3,
+        detail.stats?.max,
+        detail.stats?.upperFence
+      ])
       .filter(Number.isFinite);
     if(!values.length){
       wrap.style.display='none';
@@ -931,11 +983,13 @@ function colorForRegionCount(count){
               borderWidth:BOX_IQR_LINE_WIDTH,
               borderCapStyle:'round'
             },
-            boxIndicators:{highlight,collapsed,color:accentColor}
+            boxIndicators:{highlight,collapsed,color:accentColor},
+            boxStats:stats,
+            minMaxLineColor:accentColor
           };
         })
       },
-      plugins:[boxCollapsedPlugin],
+      plugins:[boxCollapsedPlugin,boxMinMaxLinePlugin],
       options:{
         parsing:false,
         responsive:true,
@@ -989,7 +1043,14 @@ function colorForRegionCount(count){
     }
     const categories=ready.map(detail=>detail.name);
     const values=ready
-      .flatMap(detail=>[detail.stats?.min,detail.stats?.q1,detail.stats?.q3,detail.stats?.max])
+      .flatMap(detail=>[
+        detail.stats?.lowerFence,
+        detail.stats?.min,
+        detail.stats?.q1,
+        detail.stats?.q3,
+        detail.stats?.max,
+        detail.stats?.upperFence
+      ])
       .filter(Number.isFinite);
     if(!values.length){
       wrap.style.display='none';
@@ -1057,11 +1118,13 @@ function colorForRegionCount(count){
               borderWidth:BOX_IQR_LINE_WIDTH,
               borderCapStyle:'round'
             },
-            boxIndicators:{highlight,collapsed,color:accent2Color}
+            boxIndicators:{highlight,collapsed,color:accent2Color},
+            boxStats:stats,
+            minMaxLineColor:accent2Color
           };
         })
       },
-      plugins:[boxCollapsedPlugin],
+      plugins:[boxCollapsedPlugin,boxMinMaxLinePlugin],
       options:{
         parsing:false,
         responsive:true,
