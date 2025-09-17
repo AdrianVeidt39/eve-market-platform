@@ -160,7 +160,7 @@
       </div>
       <div id="ordersBoxWrap" class="table-wrap">
         <table id="ordersBoxTable" class="table-small">
-          <caption>Resumen box plot · Top 10 por órdenes (por artículo)</caption>
+          <caption>Resumen box plot · Top 10 por órdenes (precios por artículo)</caption>
           <thead>
             <tr>
               <th>Métrica</th>
@@ -1059,7 +1059,7 @@ function updateBoxPlotTables(priceDetails=[],orderDetails=[]){
     return {visible:true,enriched,metrics};
   };
   const priceResult=renderTable(priceTable,priceWrap,priceDetails,fmtPrice);
-  const ordersResult=renderTable(ordersTable,ordersWrap,orderDetails,fmtNumber);
+  const ordersResult=renderTable(ordersTable,ordersWrap,orderDetails,fmtPrice);
   updatePriceBoxChart(priceResult.enriched,priceResult.metrics);
   updateOrdersBoxChart(ordersResult.enriched,ordersResult.metrics);
   if(priceResult.visible||ordersResult.visible){
@@ -1345,11 +1345,10 @@ function generateCharts(){
       name,
       values:(priceMap.get(name)||[]).filter(Number.isFinite)
     }));
-    const orderDetails=topOrders.map(([name])=>{
-      const countsMap=orderLocationCounts.get(name);
-      const values=countsMap?Array.from(countsMap.values()).filter(Number.isFinite):[];
-      return {name,values};
-    });
+    const orderDetails=topOrders.map(([name])=>({
+      name,
+      values:(priceMap.get(name)||[]).filter(Number.isFinite)
+    }));
     updateBoxPlotTables(priceDetails,orderDetails);
     if(topOrders.length){
       try{
