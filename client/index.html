@@ -794,14 +794,14 @@ function colorForRegionCount(count){
       wrap.style.display='none';
       return;
     }
-    const collapsed=enriched.filter(detail=>isCollapsedBoxStats(detail.stats));
-    if(!collapsed.length){
+    const expanded=enriched.filter(detail=>!isCollapsedBoxStats(detail.stats));
+    if(!expanded.length){
       wrap.style.display='none';
       return;
     }
-    const categories=collapsed.map(detail=>detail.name);
-    const values=collapsed
-      .map(detail=>detail.stats?.min)
+    const categories=expanded.map(detail=>detail.name);
+    const values=expanded
+      .flatMap(detail=>[detail.stats?.q1,detail.stats?.q3])
       .filter(Number.isFinite);
     if(!values.length){
       wrap.style.display='none';
@@ -838,19 +838,20 @@ function colorForRegionCount(count){
     priceBoxMetricsChart=new Chart(canvas,{
       type:'scatter',
       data:{
-        datasets:[{
-          label:'Valores constantes',
-          data:collapsed.map(detail=>({x:detail.stats.min,y:detail.name})),
-          pointStyle:'cross',
-          pointRadius:6,
-          pointHoverRadius:6,
-          pointBorderWidth:1.5,
-          pointBorderColor:accentColor,
-          pointBackgroundColor:accentColor,
-          showLine:false,
-          hitRadius:6
-        }]
-
+        datasets:expanded.map(detail=>({
+          label:detail.name,
+          data:[
+            {x:detail.stats.q1,y:detail.name},
+            {x:detail.stats.q3,y:detail.name}
+          ],
+          showLine:true,
+          pointRadius:0,
+          pointHoverRadius:0,
+          borderColor:accentColor,
+          borderCapStyle:'round',
+          spanGaps:false,
+          clip:false
+        }))
       },
       options:{
         parsing:false,
@@ -894,14 +895,14 @@ function colorForRegionCount(count){
       wrap.style.display='none';
       return;
     }
-    const collapsed=enriched.filter(detail=>isCollapsedBoxStats(detail.stats));
-    if(!collapsed.length){
+    const expanded=enriched.filter(detail=>!isCollapsedBoxStats(detail.stats));
+    if(!expanded.length){
       wrap.style.display='none';
       return;
     }
-    const categories=collapsed.map(detail=>detail.name);
-    const values=collapsed
-      .map(detail=>detail.stats?.min)
+    const categories=expanded.map(detail=>detail.name);
+    const values=expanded
+      .flatMap(detail=>[detail.stats?.q1,detail.stats?.q3])
       .filter(Number.isFinite);
     if(!values.length){
       wrap.style.display='none';
@@ -938,18 +939,20 @@ function colorForRegionCount(count){
     ordersBoxMetricsChart=new Chart(canvas,{
       type:'scatter',
       data:{
-        datasets:[{
-          label:'Valores constantes',
-          data:collapsed.map(detail=>({x:detail.stats.min,y:detail.name})),
-          pointStyle:'cross',
-          pointRadius:6,
-          pointHoverRadius:6,
-          pointBorderWidth:1.5,
-          pointBorderColor:accent2Color,
-          pointBackgroundColor:accent2Color,
-          showLine:false,
-          hitRadius:6
-        }]
+        datasets:expanded.map(detail=>({
+          label:detail.name,
+          data:[
+            {x:detail.stats.q1,y:detail.name},
+            {x:detail.stats.q3,y:detail.name}
+          ],
+          showLine:true,
+          pointRadius:0,
+          pointHoverRadius:0,
+          borderColor:accent2Color,
+          borderCapStyle:'round',
+          spanGaps:false,
+          clip:false
+        }))
       },
       options:{
         parsing:false,
