@@ -417,21 +417,33 @@ window.clearEsiCache=clearCache;
 
 async function fetchWithRetry(url, opts = {}, maxRetries = 3) {
   const finalOpts = { ...opts };
+  const isBrowser = typeof window !== "undefined" && typeof window.document !== "undefined";
   if (typeof Headers !== "undefined") {
-    const headers = new Headers(opts.headers || {});
-    if (!headers.has("Accept-Language")) headers.set("Accept-Language", "en");
-    const isBrowser = typeof window !== "undefined" && typeof window.document !== "undefined";
-    if (isBrowser) {
-      headers.delete("User-Agent");
-    } else if (!headers.has("User-Agent")) {
-      headers.set("User-Agent", USER_AGENT);
+    const headers = new Headers();
+    const rawHeaders = opts.headers;
+    if (rawHeaders instanceof Headers) {
+      rawHeaders.forEach((value, key) => {
+        if (isBrowser && key.toLowerCase() === "user-agent") return;
+        headers.set(key, value);
+      });
+    } else if (Array.isArray(rawHeaders)) {
+      for (const [key, value] of rawHeaders) {
+        if (isBrowser && String(key).toLowerCase() === "user-agent") continue;
+        headers.set(key, value);
+      }
+    } else if (rawHeaders && typeof rawHeaders === "object") {
+      for (const [key, value] of Object.entries(rawHeaders)) {
+        if (isBrowser && key.toLowerCase() === "user-agent") continue;
+        headers.set(key, value);
+      }
     }
+    if (!headers.has("Accept-Language")) headers.set("Accept-Language", "en");
+    if (!isBrowser && !headers.has("User-Agent")) headers.set("User-Agent", USER_AGENT);
     finalOpts.headers = headers;
   } else {
     const headers = { ...(opts.headers || {}) };
     if (!("Accept-Language" in headers)) headers["Accept-Language"] = "en";
-    const hasWindow = typeof window !== "undefined" && typeof window.document !== "undefined";
-    if (hasWindow) {
+    if (isBrowser) {
       delete headers["User-Agent"];
     } else if (!("User-Agent" in headers)) {
       headers["User-Agent"] = USER_AGENT;
