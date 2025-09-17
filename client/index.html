@@ -452,14 +452,20 @@ async function fetchWithRetry(url, opts = {}, maxRetries = 3) {
     }
     const remain = Number(res.headers.get("X-Esi-Error-Limit-Remain") || "100");
     const reset = Number(res.headers.get("X-Esi-Error-Limit-Reset") || "0");
+    const hasValidReset = Number.isFinite(reset) && reset > 0;
+    const resetMs = hasValidReset ? reset * 1000 : 1000;
+    const resetLogNote = hasValidReset ? "" : " (retardo mínimo aplicado)";
     if (LOG_ESI) logInfo(`[ESI] ${url} -> ${res.status} (try ${attempt}/${maxRetries})`);
     if (![420, 429, 503].includes(res.status)) {
-      if (remain <= 1) await sleep(reset * 1000);
+      if (remain <= 1) {
+        if (LOG_ESI) logWarn(`[ESI] límite de error bajo tras ${url}; esperando ${resetMs}ms${resetLogNote}`);
+        await sleep(resetMs);
+      }
       return res;
     }
     if (attempt === maxRetries) throw new Error(`HTTP ${res.status} ${url}`);
-    const delay = remain <= 1 ? reset * 1000 : 500 * 2 ** attempt;
-    if (LOG_ESI) logWarn(`[ESI] retry ${url} -> ${res.status}; waiting ${delay}ms`);
+    const delay = remain <= 1 ? resetMs : 500 * 2 ** attempt;
+    if (LOG_ESI) logWarn(`[ESI] retry ${url} -> ${res.status}; waiting ${delay}ms${remain <= 1 ? resetLogNote : ""}`);
     await sleep(delay);
   }
 }
