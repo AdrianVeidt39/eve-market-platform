@@ -365,10 +365,16 @@ function isCollapsedBoxStats(stats){
   return values.every(v=>nearlyEqual(v,values[0]));
 }
 
+function safeLocalStorageGet(key){
+  if(typeof localStorage === 'undefined') return null;
+  try{ return localStorage.getItem(key); }
+  catch(_){ return null; }
+}
+
 const LOG_ESI = (() => {
   const env = (typeof process !== 'undefined' && process.env && process.env.LOG_ESI) ??
               (typeof window !== 'undefined' && window.ENV && window.ENV.LOG_ESI) ??
-              (typeof localStorage !== 'undefined' && localStorage.getItem('LOG_ESI'));
+              safeLocalStorageGet('LOG_ESI');
   if (env === undefined || env === null) return true;
   return env === true || env === 'true';
 })();
