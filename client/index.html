@@ -722,69 +722,63 @@ function colorForRegionCount(count){
       return;
     }
     const categories=enriched.map(detail=>detail.name);
-    const datasets=[];
+    const values=[];
     chartMetrics.forEach(metric=>{
-      const points=enriched.map(detail=>{
+      enriched.forEach(detail=>{
         const raw=metric.getValue(detail.stats);
-        if(!Number.isFinite(raw)) return null;
-        return {
-          x:raw,
-          y:detail.name,
-          article:detail.name,
-          rawValue:raw,
-          stats:detail.stats
-        };
-      }).filter(Boolean);
-      if(!points.length) return;
-      // Mostrar únicamente los ejes (sin puntos visibles) para esta vista preliminar.
-      datasets.push({
-        label:metric.label,
-        data:points,
-        borderColor:'rgba(0,0,0,0)',
-        backgroundColor:'rgba(0,0,0,0)',
-        pointRadius:0,
-        pointHoverRadius:0,
-        hitRadius:0,
-        borderWidth:0,
-        showLine:false,
-        metricFormat:metric.format
+        if(Number.isFinite(raw)) values.push(raw);
       });
     });
-    if(!datasets.length){
+    if(!values.length){
       wrap.style.display='none';
       return;
     }
+    const baseMin=Math.min(...values);
+    const baseMax=Math.max(...values);
+    let minValue=baseMin;
+    let maxValue=baseMax;
+    if(minValue===maxValue){
+      const pad=Math.abs(minValue||1)*0.1;
+      minValue-=pad;
+      maxValue+=pad;
+    } else {
+      const pad=(maxValue-minValue)*0.05;
+      minValue-=pad;
+      maxValue+=pad;
+    }
+    if(baseMin>=0 && minValue<0) minValue=0;
+    if(minValue===maxValue){
+      maxValue=minValue+1;
+    }
+    const primaryFormatter=chartMetrics.find(metric=>typeof metric.format==='function')?.format;
+    const formatTick=value=>{
+      if(!Number.isFinite(value)) return value;
+      try{
+        const formatted=primaryFormatter?primaryFormatter(value):fmtNumber(value);
+        return typeof formatted==='string'?formatted:fmtNumber(value);
+      }catch(e){
+        return fmtNumber(value);
+      }
+    };
     wrap.style.display='block';
     priceBoxMetricsChart=new Chart(canvas,{
       type:'scatter',
-      data:{datasets},
+      data:{datasets:[]},
       options:{
         parsing:false,
         responsive:true,
         maintainAspectRatio:false,
         plugins:{
-          legend:{position:'bottom',labels:{color:textColor}},
-          tooltip:{
-            callbacks:{
-              title(items){
-                const item=items&&items[0];
-                return item?.raw?.article||'';
-              },
-              label(ctx){
-                const dataset=ctx.dataset||{};
-                const format=typeof dataset.metricFormat==='function'?dataset.metricFormat:value=>String(value);
-                const rawValue=ctx.raw?.rawValue;
-                const value=Number.isFinite(rawValue)?format(rawValue,ctx.raw?.stats):'—';
-                return `${dataset.label}: ${value}`;
-              }
-            }
-          }
+          legend:{display:false},
+          tooltip:{enabled:false}
         },
         scales:{
           x:{
             title:{display:true,text:'Valor de la métrica',color:textColor},
-            ticks:{color:textColor},
-            grid:{color:axisGridColor}
+            ticks:{color:textColor,callback:formatTick},
+            grid:{color:axisGridColor},
+            min:minValue,
+            max:maxValue
           },
           y:{
             type:'category',
