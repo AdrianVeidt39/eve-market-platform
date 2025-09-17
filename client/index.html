@@ -723,7 +723,7 @@ function colorForRegionCount(count){
     }
     const categories=enriched.map(detail=>detail.name);
     const datasets=[];
-    chartMetrics.forEach((metric,index)=>{
+    chartMetrics.forEach(metric=>{
       const points=enriched.map(detail=>{
         const raw=metric.getValue(detail.stats);
         if(!Number.isFinite(raw)) return null;
@@ -736,14 +736,17 @@ function colorForRegionCount(count){
         };
       }).filter(Boolean);
       if(!points.length) return;
-      const color=palette[index%palette.length];
+      // Mostrar únicamente los ejes (sin puntos visibles) para esta vista preliminar.
       datasets.push({
         label:metric.label,
         data:points,
-        borderColor:color,
-        backgroundColor:color,
-        pointRadius:4,
-        pointHoverRadius:6,
+        borderColor:'rgba(0,0,0,0)',
+        backgroundColor:'rgba(0,0,0,0)',
+        pointRadius:0,
+        pointHoverRadius:0,
+        hitRadius:0,
+        borderWidth:0,
+        showLine:false,
         metricFormat:metric.format
       });
     });
