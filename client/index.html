@@ -742,6 +742,7 @@ let selectedDestinationIds=new Set();
 let connectedOrdersByConstellation=new Map();
 let baseOrdersLoaded=false;
 let ensureDestinationOrdersPromise=null;
+let destinationCountsReady=false;
 
 function updateRegionNameCache(list){
   if(!Array.isArray(list)) return;
@@ -808,6 +809,7 @@ function resetDestinationSelections(){
   if(wrap) wrap.style.display='none';
   const note=j('#destinationNote');
   if(note){ note.style.display='none'; note.textContent=''; }
+  renderSystemsTable();
 }
 
 function refreshDestinationButtonsState(){
@@ -825,6 +827,7 @@ function refreshDestinationButtonsState(){
     });
   }
   updateDestinationNote();
+  renderSystemsTable();
 }
 
 function updateDestinationNote(){
@@ -1298,6 +1301,7 @@ async function onConstellationChange(){
   j('#queryBtn').disabled=true;
   systems=[]; stargates=[]; stationsInConstellation=new Set(); stationToSystem=new Map(); systemNameMap=new Map();
   ordersRaw=[];
+  destinationCountsReady=false;
   resetDestinationSelections();
   baseOrdersLoaded=false;
   render();
@@ -1411,6 +1415,7 @@ function resetLower(){
   systemNameMap=new Map();
   systems=[];
   stargates=[];
+  destinationCountsReady=false;
   resetDestinationSelections();
   baseOrdersRaw=[];
   connectedOrdersRaw=[];
@@ -1575,29 +1580,182 @@ function render(){
   tbody.innerHTML=rows.map(r=>`<tr><td>${escapeHtml(r.type_name)}</td><td>${r.order_type==='sell'?'Venta':'Compra'}</td><td>${fmtPrice(r.price)}</td><td>${fmtInt(r.volume_remain)}</td><td>${fmtInt(r.min_volume)}</td><td>${r.range}</td><td>${escapeHtml(r.system_name)}</td><td>${escapeHtml(r.constellation_name)}</td><td>${escapeHtml(r.region_name)}</td><td>${escapeHtml(r.station_name)}</td><td><span class="muted" title="${r.issued}">${new Date(r.issued).toLocaleString("es-MX")}</span></td><td>${r.duration}</td></tr>`).join('');
   updateConnectedButtonState();
   updateStargateBubble(rows);
+  renderSystemsTable();
 }
-function renderSystemsTable(){ const wrap=j('#systemsTableWrap'); const body=j('#systemsTable tbody'); if(wrap) wrap.style.display='none'; if(body) body.innerHTML=''; }
+function normalizeNameKey(label){
+  if(typeof label!=='string') return null;
+  const trimmed=label.trim();
+  if(!trimmed) return null;
+  return trimmed.toLowerCase();
+}
+function isIdInSet(value,set){
+  if(!set||!set.size||value==null) return false;
+  if(typeof value==='number'){ return Number.isFinite(value) && set.has(value); }
+  const parsed=Number(value);
+  if(Number.isFinite(parsed)) return set.has(parsed);
+  return false;
+}
+function getActiveDestinationConstellationIds(){
+  const active=new Set();
+  const consSel=j('#fConstellation');
+  if(consSel){
+    const value=consSel.value;
+    if(value&&value!=='all'){
+      const parsed=Number(value);
+      if(Number.isFinite(parsed)) active.add(parsed);
+    }
+  }
+  selectedDestinationIds.forEach(id=>{ if(Number.isFinite(id)) active.add(id); });
+  return active;
+}
+function buildConstellationRegionLookup(){
+  const map=new Map();
+  if(Number.isFinite(currentConstellationId) && Number.isFinite(currentRegionId)){
+    map.set(currentConstellationId,currentRegionId);
+  }
+  destinationEntries.forEach(entry=>{
+    if(!entry) return;
+    const consId=Number(entry.id);
+    const regionId=Number(entry.regionId);
+    if(Number.isFinite(consId) && Number.isFinite(regionId) && !map.has(consId)){
+      map.set(consId,regionId);
+    }
+  });
+  ordersRaw.forEach(order=>{
+    if(!order) return;
+    const consId=Number(order.__constellationId);
+    const regionId=Number(order.__regionId);
+    if(Number.isFinite(consId) && Number.isFinite(regionId) && !map.has(consId)){
+      map.set(consId,regionId);
+    }
+  });
+  return map;
+}
+function getActiveDestinationRegionIds(activeConstellationIds){
+  const active=new Set();
+  const regionSel=j('#fRegion');
+  if(regionSel){
+    const value=regionSel.value;
+    if(value&&value!=='all'){
+      const parsed=Number(value);
+      if(Number.isFinite(parsed)) active.add(parsed);
+    }
+  }
+  if(activeConstellationIds&&activeConstellationIds.size){
+    const lookup=buildConstellationRegionLookup();
+    activeConstellationIds.forEach(id=>{
+      const regionId=lookup.get(id);
+      if(Number.isFinite(regionId)) active.add(regionId);
+    });
+  }
+  return active;
+}
+function renderSystemsTable(){
+  const wrap=j('#systemsTableWrap');
+  const body=j('#systemsTable tbody');
+  if(!wrap||!body) return;
+  if(!systems.length || !destinationCountsReady){
+    wrap.style.display='none';
+    body.innerHTML='';
+    return;
+  }
+  const activeConstellations=getActiveDestinationConstellationIds();
+  const activeRegions=getActiveDestinationRegionIds(activeConstellations);
+  const rows=systems.map(s=>{
+    const totalStargates=Number.isFinite(s.totalStargates)?s.totalStargates:0;
+    const destConstellations=Array.isArray(s.destConstellations)?s.destConstellations:[];
+    const destRegions=Array.isArray(s.destRegions)?s.destRegions:[];
+    const filteredConstCount=destConstellations.filter(dest=>!isIdInSet(dest?.id,activeConstellations)).length;
+    const filteredRegionCount=destRegions.filter(dest=>!isIdInSet(dest?.id,activeRegions)).length;
+    const systemName=typeof s.name==='string'&&s.name?s.name:String(s.id||'—');
+    const systemId=Number.isFinite(s.id)?String(s.id):'—';
+    return `<tr><td>${escapeHtml(systemName)}</td><td>${escapeHtml(systemId)}</td><td>${fmtInt(totalStargates)}</td><td>${fmtInt(filteredRegionCount)}</td><td>${fmtInt(filteredConstCount)}</td></tr>`;
+  });
+  if(rows.length){
+    body.innerHTML=rows.join('');
+    wrap.style.display='block';
+  }else{
+    body.innerHTML='';
+    wrap.style.display='none';
+  }
+}
 function renderStargatesTable(){ const wrap=j('#stargatesTableWrap'); const body=j('#stargatesTable tbody'); if(!wrap||!body) return; if(stargates.length){ body.innerHTML=stargates.map(g=>`<tr><td>${g.sourceSystem}</td><td>${g.gateName}</td><td>${g.id||''}</td><td>${g.destSystem}</td><td>${g.destConstellation}</td><td>${g.destRegion}</td></tr>`).join(''); wrap.style.display='block'; }else{ wrap.style.display='none'; }}
 function computeDestinationCounts(){
   const nameToId=new Map(systems.map(s=>[s.name,s.id]));
   const counts=new Map();
-  systems.forEach(s=>counts.set(s.id,{consts:new Set(),regions:new Set()}));
+  systems.forEach(s=>counts.set(s.id,{consts:new Map(),regions:new Map()}));
   for(const gate of stargates){
+    if(!gate) continue;
     let sysId=gate.sourceSystemId;
     if(typeof sysId!=='number') sysId=nameToId.get(gate.sourceSystem);
     if(sysId===undefined) continue;
-    if(!counts.has(sysId)) counts.set(sysId,{consts:new Set(),regions:new Set()});
+    if(!counts.has(sysId)) counts.set(sysId,{consts:new Map(),regions:new Map()});
     const entry=counts.get(sysId);
-    const constKey=gate.destConstellationId ?? gate.destConstellation;
-    const regionKey=gate.destRegionId ?? gate.destRegion;
-    if(constKey!==undefined && constKey!==null) entry.consts.add(constKey);
-    if(regionKey!==undefined && regionKey!==null) entry.regions.add(regionKey);
+    const constId=Number(gate.destConstellationId);
+    const normalizedConstId=Number.isFinite(constId)?constId:null;
+    let constName=typeof gate.destConstellation==='string'?gate.destConstellation.trim():'';
+    if(!constName && normalizedConstId!=null){
+      const cachedName=constellationNameMap.get(normalizedConstId);
+      if(typeof cachedName==='string' && cachedName) constName=cachedName;
+    }
+    const constKey=normalizedConstId!=null?`id:${normalizedConstId}`:(normalizeNameKey(constName)?`name:${normalizeNameKey(constName)}`:null);
+    if(constKey){
+      if(!entry.consts.has(constKey)){
+        entry.consts.set(constKey,{id:normalizedConstId,name:constName});
+      }else if(constName && !entry.consts.get(constKey).name){
+        entry.consts.get(constKey).name=constName;
+      }
+    }
+    const regionId=Number(gate.destRegionId);
+    const normalizedRegionId=Number.isFinite(regionId)?regionId:null;
+    let regionName=typeof gate.destRegion==='string'?gate.destRegion.trim():'';
+    if(!regionName && normalizedRegionId!=null){
+      const cachedRegion=regionNameMap.get(normalizedRegionId);
+      if(typeof cachedRegion==='string' && cachedRegion) regionName=cachedRegion;
+    }
+    const regionKey=normalizedRegionId!=null?`id:${normalizedRegionId}`:(normalizeNameKey(regionName)?`name:${normalizeNameKey(regionName)}`:null);
+    if(regionKey){
+      if(!entry.regions.has(regionKey)){
+        entry.regions.set(regionKey,{id:normalizedRegionId,name:regionName});
+      }else if(regionName && !entry.regions.get(regionKey).name){
+        entry.regions.get(regionKey).name=regionName;
+      }
+    }
   }
   for(const s of systems){
-    const entry=counts.get(s.id);
-    s.distinctDestConstellations=entry?entry.consts.size:0;
-    s.distinctDestRegions=entry?entry.regions.size:0;
+    const entry=counts.get(s.id)||{consts:new Map(),regions:new Map()};
+    const constDetails=[...entry.consts.values()].map(detail=>{
+      const id=Number.isFinite(detail.id)?detail.id:null;
+      let name=detail.name;
+      if(!name){
+        if(id!=null){
+          const cached=constellationNameMap.get(id);
+          if(typeof cached==='string' && cached) name=cached; else name=String(id);
+        }else{
+          name='';
+        }
+      }
+      return {id,name};
+    });
+    const regionDetails=[...entry.regions.values()].map(detail=>{
+      const id=Number.isFinite(detail.id)?detail.id:null;
+      let name=detail.name;
+      if(!name){
+        if(id!=null){
+          const cached=regionNameMap.get(id);
+          if(typeof cached==='string' && cached) name=cached; else name=String(id);
+        }else{
+          name='';
+        }
+      }
+      return {id,name};
+    });
+    s.destConstellations=constDetails;
+    s.destRegions=regionDetails;
+    s.distinctDestConstellations=constDetails.length;
+    s.distinctDestRegions=regionDetails.length;
   }
+  destinationCountsReady=true;
 }
 function bubbleRadiusFromConstellations(count){
   if(!count) return 0;
