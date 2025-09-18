@@ -197,12 +197,12 @@
     <div class="card" style="margin-top:16px">
       <div class="section-title">Órdenes encontradas</div>
       <div class="controls">
+        <button id="chartsBtn" class="btn" disabled>Generar gráficas</button>
         <div class="stats">
           <span class="chip"><span id="ordersCount">0</span> órdenes</span>
           <span class="chip"><span id="pagesInfo">0 / 0 páginas</span></span>
         </div>
         <div class="right">
-          <button id="chartsBtn" class="btn" disabled>Generar gráficas</button>
           <button id="connectedOrdersBtn" class="btn" disabled>Constelaciones destino</button>
           <button id="exportBtn" class="btn" disabled>Exportar CSV</button>
         </div>
@@ -741,6 +741,7 @@ let destinationEntries=[];
 let selectedDestinationIds=new Set();
 let connectedOrdersByConstellation=new Map();
 let baseOrdersLoaded=false;
+let ensureDestinationOrdersPromise=null;
 
 function updateRegionNameCache(list){
   if(!Array.isArray(list)) return;
@@ -842,7 +843,7 @@ function updateDestinationNote(){
   const totalDest=destinationEntries.length;
   const totalRegions=regionSet.size;
   const selected=selectedDestinationIds.size;
-  note.innerHTML=`Constelaciones disponibles: ${fmtInt(totalDest)} · Regiones destino: ${fmtInt(totalRegions)} · Seleccionadas: ${fmtInt(selected)}. Las órdenes de las constelaciones seleccionadas se agregarán al generar gráficas.`;
+  note.innerHTML=`Constelaciones disponibles: ${fmtInt(totalDest)} · Regiones destino: ${fmtInt(totalRegions)} · Seleccionadas: ${fmtInt(selected)}. Las órdenes de las constelaciones seleccionadas se consultarán junto con la constelación origen al pulsar <b>Consultar mercado</b>.`;
   note.style.display='block';
 }
 
@@ -929,7 +930,7 @@ async function prepareDestinationButtons(){
   refreshDestinationButtonsState();
 }
 
-function toggleDestinationSelection(id){
+async function toggleDestinationSelection(id){
   if(!Number.isFinite(id)) return;
   if(selectedDestinationIds.has(id)){
     selectedDestinationIds.delete(id);
@@ -938,8 +939,21 @@ function toggleDestinationSelection(id){
   }
   chartsReady=false;
   refreshDestinationButtonsState();
-  rebuildConnectedOrdersFromSelection();
   hideConnectedNote();
+  if(!baseOrdersLoaded){
+    rebuildConnectedOrdersFromSelection();
+    return;
+  }
+  const busy=j('#busyHint');
+  const prevDisplay=busy?busy.style.display:null;
+  if(busy) busy.style.display='flex';
+  try{
+    await ensureSelectedDestinationOrders();
+  }catch(e){
+    logError(e);
+  }finally{
+    if(busy) busy.style.display=prevDisplay!=null?prevDisplay:'none';
+  }
 }
 
 function rebuildConnectedOrdersFromSelection(){
@@ -991,96 +1005,107 @@ async function ensureDestinationPrepared(entry){
 }
 
 async function ensureSelectedDestinationOrders(){
-  const selectedEntries=destinationEntries.filter(entry=>selectedDestinationIds.has(entry.id));
-  if(!selectedEntries.length){
+  if(ensureDestinationOrdersPromise){
+    return ensureDestinationOrdersPromise;
+  }
+  const run=async()=>{
+    const selectedEntries=destinationEntries.filter(entry=>selectedDestinationIds.has(entry.id));
+    if(!selectedEntries.length){
+      rebuildConnectedOrdersFromSelection();
+      hideConnectedNote();
+      return;
+    }
+    const entriesToFetch=selectedEntries.filter(entry=>!connectedOrdersByConstellation.has(entry.id));
+    const newlyFetched=[];
+    if(entriesToFetch.length){
+      const regionGroups=new Map();
+      for(const entry of entriesToFetch){
+        await ensureDestinationPrepared(entry);
+        if(!Number.isFinite(entry.regionId) || !(entry.stationIds instanceof Set) || entry.stationIds.size===0){
+          connectedOrdersByConstellation.set(entry.id,[]);
+          continue;
+        }
+        let group=regionGroups.get(entry.regionId);
+        if(!group){
+          group={regionId:entry.regionId,stationIds:new Set(),stationToConst:new Map(),entries:[]};
+          regionGroups.set(entry.regionId,group);
+        }
+        group.entries.push(entry);
+        entry.stationIds.forEach(stationId=>{
+          group.stationIds.add(stationId);
+          group.stationToConst.set(stationId,entry);
+        });
+      }
+      for(const group of regionGroups.values()){
+        if(!group.stationIds.size) continue;
+        let page=1,totalPages=1;
+        do{
+          let result;
+          try{
+            result=await throttleEsiCall(()=>get(`${ESI}/markets/${group.regionId}/orders/?order_type=all&page=${page}`));
+          }catch(e){
+            logError(e);
+            break;
+          }
+          const {data,pages}=result;
+          totalPages=pages||totalPages;
+          for(const order of data){
+            if(!group.stationIds.has(order.location_id)) continue;
+            const entry=group.stationToConst.get(order.location_id);
+            if(!entry) continue;
+            let bucket=connectedOrdersByConstellation.get(entry.id);
+            if(!bucket){
+              bucket=[];
+              connectedOrdersByConstellation.set(entry.id,bucket);
+            }
+            if(entry.regionName){
+              regionNameMap.set(entry.regionId,entry.regionName);
+            }else if(regionNameMap.has(entry.regionId)){
+              entry.regionName=regionNameMap.get(entry.regionId);
+            }
+            const constellationName=entry.name || constellationNameMap.get(entry.id) || String(entry.id);
+            const regionName=entry.regionName || regionNameMap.get(entry.regionId) || String(entry.regionId);
+            const enriched={...order,__constellationId:entry.id,__constellationName:constellationName,__regionId:entry.regionId,__regionName:regionName};
+            bucket.push(enriched);
+            newlyFetched.push(enriched);
+            if(order.system_id && !systemNameMap.has(order.system_id)){
+              systemNameMap.set(order.system_id,order.system_id);
+            }
+          }
+          page++;
+        }while(page<=totalPages);
+      }
+      entriesToFetch.forEach(entry=>{
+        if(!connectedOrdersByConstellation.has(entry.id)){
+          connectedOrdersByConstellation.set(entry.id,[]);
+        }
+      });
+      if(newlyFetched.length){
+        const ids=new Set();
+        newlyFetched.forEach(o=>{
+          if(o.type_id!=null) ids.add(o.type_id);
+          if(o.location_id!=null) ids.add(o.location_id);
+        });
+        const missing=[...ids].filter(id=>id!=null && !nameCache.has(id));
+        for(let i=0;i<missing.length;i+=900){
+          const slice=missing.slice(i,i+900);
+          if(!slice.length) continue;
+          try{
+            const names=await throttleEsiCall(()=>post(`${ESI}/universe/names/`,slice));
+            for(const n of names){ nameCache.set(n.id,n.name); }
+          }catch(e){ logError(e); }
+        }
+      }
+    }
     rebuildConnectedOrdersFromSelection();
-    hideConnectedNote();
-    return;
+    updateConnectedSummary(selectedEntries);
+  };
+  ensureDestinationOrdersPromise=run();
+  try{
+    await ensureDestinationOrdersPromise;
+  }finally{
+    ensureDestinationOrdersPromise=null;
   }
-  const entriesToFetch=selectedEntries.filter(entry=>!connectedOrdersByConstellation.has(entry.id));
-  const newlyFetched=[];
-  if(entriesToFetch.length){
-    const regionGroups=new Map();
-    for(const entry of entriesToFetch){
-      await ensureDestinationPrepared(entry);
-      if(!Number.isFinite(entry.regionId) || !(entry.stationIds instanceof Set) || entry.stationIds.size===0){
-        connectedOrdersByConstellation.set(entry.id,[]);
-        continue;
-      }
-      let group=regionGroups.get(entry.regionId);
-      if(!group){
-        group={regionId:entry.regionId,stationIds:new Set(),stationToConst:new Map(),entries:[]};
-        regionGroups.set(entry.regionId,group);
-      }
-      group.entries.push(entry);
-      entry.stationIds.forEach(stationId=>{
-        group.stationIds.add(stationId);
-        group.stationToConst.set(stationId,entry);
-      });
-    }
-    for(const group of regionGroups.values()){
-      if(!group.stationIds.size) continue;
-      let page=1,totalPages=1;
-      do{
-        let result;
-        try{
-          result=await throttleEsiCall(()=>get(`${ESI}/markets/${group.regionId}/orders/?order_type=all&page=${page}`));
-        }catch(e){
-          logError(e);
-          break;
-        }
-        const {data,pages}=result;
-        totalPages=pages||totalPages;
-        for(const order of data){
-          if(!group.stationIds.has(order.location_id)) continue;
-          const entry=group.stationToConst.get(order.location_id);
-          if(!entry) continue;
-          let bucket=connectedOrdersByConstellation.get(entry.id);
-          if(!bucket){
-            bucket=[];
-            connectedOrdersByConstellation.set(entry.id,bucket);
-          }
-          if(entry.regionName){
-            regionNameMap.set(entry.regionId,entry.regionName);
-          }else if(regionNameMap.has(entry.regionId)){
-            entry.regionName=regionNameMap.get(entry.regionId);
-          }
-          const constellationName=entry.name || constellationNameMap.get(entry.id) || String(entry.id);
-          const regionName=entry.regionName || regionNameMap.get(entry.regionId) || String(entry.regionId);
-          const enriched={...order,__constellationId:entry.id,__constellationName:constellationName,__regionId:entry.regionId,__regionName:regionName};
-          bucket.push(enriched);
-          newlyFetched.push(enriched);
-          if(order.system_id && !systemNameMap.has(order.system_id)){
-            systemNameMap.set(order.system_id,order.system_id);
-          }
-        }
-        page++;
-      }while(page<=totalPages);
-    }
-    entriesToFetch.forEach(entry=>{
-      if(!connectedOrdersByConstellation.has(entry.id)){
-        connectedOrdersByConstellation.set(entry.id,[]);
-      }
-    });
-    if(newlyFetched.length){
-      const ids=new Set();
-      newlyFetched.forEach(o=>{
-        if(o.type_id!=null) ids.add(o.type_id);
-        if(o.location_id!=null) ids.add(o.location_id);
-      });
-      const missing=[...ids].filter(id=>id!=null && !nameCache.has(id));
-      for(let i=0;i<missing.length;i+=900){
-        const slice=missing.slice(i,i+900);
-        if(!slice.length) continue;
-        try{
-          const names=await throttleEsiCall(()=>post(`${ESI}/universe/names/`,slice));
-          for(const n of names){ nameCache.set(n.id,n.name); }
-        }catch(e){ logError(e); }
-      }
-    }
-  }
-  rebuildConnectedOrdersFromSelection();
-  updateConnectedSummary(selectedEntries);
 }
 
 function updateConnectedSummary(entries){
@@ -1406,28 +1431,30 @@ function resetLower(){
 
 async function queryMarket(){
   const regionId=+j('#region').value;
+  chartsReady=false;
+  connectedOrdersRaw=[];
+  baseOrdersRaw=[];
+  connectedOrdersByConstellation=new Map();
+  baseOrdersLoaded=false;
+  syncOrdersRaw();
+  hideConnectedNote();
+  updateConnectedButtonState();
+  j('#systemNote').style.display='none';
+  if(!stationsInConstellation.size){
+    j('#systemNote').style.display='block';
+    j('#systemNote').innerHTML='<span class="danger">Esta constelación no tiene estaciones NPC públicas.</span> ESI no expone órdenes de estructuras sin autenticación.';
+    render();
+    return;
+  }
+  const busy=j('#busyHint');
+  const prevDisplay=busy?busy.style.display:null;
+  if(busy) busy.style.display='flex';
   try{
-    chartsReady=false;
-    connectedOrdersRaw=[];
-    baseOrdersRaw=[];
-    connectedOrdersByConstellation=new Map();
-    baseOrdersLoaded=false;
-    syncOrdersRaw();
-    hideConnectedNote();
-    updateConnectedButtonState();
-    j('#systemNote').style.display='none';
-    if(!stationsInConstellation.size){
-      j('#systemNote').style.display='block';
-      j('#systemNote').innerHTML='<span class="danger">Esta constelación no tiene estaciones NPC públicas.</span> ESI no expone órdenes de estructuras sin autenticación.';
-      render();
-      return;
-    }
-    j('#busyHint').style.display='flex';
     const orderType='all';
     const first=await throttleEsiCall(()=>get(`${ESI}/markets/${regionId}/orders/?order_type=${orderType}&page=1`));
     const totalPages=first.pages||1; filterAndPush(first.data); j('#pagesInfo').textContent=`1 / ${totalPages} páginas`;
     for(let p=2;p<=totalPages;p++){ const {data}=await throttleEsiCall(()=>get(`${ESI}/markets/${regionId}/orders/?order_type=${orderType}&page=${p}`)); filterAndPush(data); j('#pagesInfo').textContent=`${p} / ${totalPages} páginas`; }
-    j('#busyHint').style.display='none';
+    await ensureSelectedDestinationOrders();
     const ids=new Set(); for(const o of ordersRaw){ ids.add(o.type_id); ids.add(o.location_id);} if(ids.size){ const arr=[...ids]; const chunk=900; for(let i=0;i<arr.length;i+=chunk){ const names=await throttleEsiCall(()=>post(`${ESI}/universe/names/`,arr.slice(i,i+chunk))); for(const n of names){ nameCache.set(n.id,n.name);} }}
     refreshSystemFilter();
     refreshStationFilter();
@@ -1435,7 +1462,12 @@ async function queryMarket(){
     refreshRegionFilter();
     render();
     baseOrdersLoaded=true;
-  }catch(err){ logError(err); j('#busyHint').style.display='none'; alert('Fallo al consultar ESI. Revisa conexión o intenta con otra región.'); }
+  }catch(err){
+    logError(err);
+    alert('Fallo al consultar ESI. Revisa conexión o intenta con otra región.');
+  }finally{
+    if(busy) busy.style.display=prevDisplay!=null?prevDisplay:'none';
+  }
 }
 function filterAndPush(arr){
   let pushed=false;
