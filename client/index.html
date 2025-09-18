@@ -2493,10 +2493,21 @@ function updateStargateBubble(rows=[]){
   }
   const points=systems.map(s=>{
     const orders=orderCounts.get(s.id)||0;
+    const rawOrders=orders;
+    const plotOrders=Math.max(rawOrders,1);
     const totalStargates=s.totalStargates||0;
     const constCount=s.distinctDestConstellations||0;
     const regionCount=s.distinctDestRegions||0;
-    return {x:orders,y:totalStargates,r:bubbleRadiusFromConstellations(constCount),system:s.name,orders,constCount,regionCount};
+    return {
+      x:plotOrders,
+      y:totalStargates,
+      r:bubbleRadiusFromConstellations(constCount),
+      system:s.name,
+      orders:rawOrders,
+      rawOrders,
+      constCount,
+      regionCount
+    };
   });
   const maxConst=points.reduce((max,p)=>Math.max(max,p.constCount||0),0);
   const maxRegion=points.reduce((max,p)=>Math.max(max,p.regionCount||0),0);
@@ -2535,7 +2546,17 @@ function updateStargateBubble(rows=[]){
     options:{
       maintainAspectRatio:false,
       scales:{
-        x:{beginAtZero:true,title:{display:true,text:'Órdenes totales'},ticks:{precision:0}},
+        x:{
+          type:'logarithmic',
+          min:0,
+          title:{display:true,text:'Órdenes totales'},
+          ticks:{
+            callback(value){
+              if(value===1) return '0';
+              return fmtInt(value);
+            }
+          }
+        },
         y:yScale,
         yRight:yRightScale
       },
@@ -2566,7 +2587,7 @@ function updateStargateBubble(rows=[]){
       }
     }
   });
-  note.textContent='Área de la burbuja = constelaciones destino distintas. Color = regiones destino distintas. Las etiquetas muestran el nombre del sistema y resaltan "Sistema mejor conectado" en los más conectados.';
+  note.textContent='Área de la burbuja = constelaciones destino distintas. Color = regiones destino distintas. El eje X usa escala logarítmica para las órdenes; los sistemas sin órdenes se muestran en 0. Las etiquetas muestran el nombre del sistema y resaltan "Sistema mejor conectado" en los más conectados.';
   note.style.display='block';
 }
 function escapeHtml(s){ return (""+s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[m])); }
