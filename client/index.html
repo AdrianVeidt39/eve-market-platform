@@ -30,6 +30,12 @@
   .dest-btn:hover{background:rgba(48,163,255,0.12);border-color:var(--accent)}
   .dest-btn.selected{background:var(--accent);border-color:var(--accent);color:#06101b}
   .dest-btn.selected .dest-region{color:#042d46}
+  .dest-btn.loading{border-color:var(--accent2)}
+  .dest-btn.selected.loading{background:var(--accent2);border-color:var(--accent2);color:#06101b}
+  .dest-btn.selected.loading .dest-region{color:#042d46}
+  .dest-btn.loaded{border-color:#ff6b6b}
+  .dest-btn.selected.loaded{background:#ff6b6b;border-color:#ff6b6b;color:#06101b}
+  .dest-btn.selected.loaded .dest-region{color:#3b1111}
   .note{color:var(--muted);font-size:12px;margin-top:10px}
   .section-title{font-weight:700;margin:18px 0 10px}
   .stats{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:12px}
@@ -740,11 +746,14 @@ const chartIds=['chartVol','chartVolBottom','chartVal','chartValBottom','chartOr
 let chartsReady=false;
 let loadingConnectedOrders=false;
 let destinationEntries=[];
+let destinationEntryMap=new Map();
 let selectedDestinationIds=new Set();
 let connectedOrdersByConstellation=new Map();
 let baseOrdersLoaded=false;
 let ensureDestinationOrdersPromise=null;
 let destinationCountsReady=false;
+let baseFetchState={totalPages:0,fetchedPages:0};
+const destinationRegionFetchState=new Map();
 
 function updateRegionNameCache(list){
   if(!Array.isArray(list)) return;
@@ -987,6 +996,7 @@ async function ensureConstellationSystemsData(consId){
 
 function syncOrdersRaw(){
   ordersRaw = baseOrdersRaw.concat(connectedOrdersRaw);
+  updateOrdersCountDisplay();
 }
 
 function hideConnectedNote(){
@@ -1018,6 +1028,7 @@ function updateConnectedButtonState(){
 
 function resetDestinationSelections(){
   destinationEntries=[];
+  destinationEntryMap=new Map();
   selectedDestinationIds=new Set();
   connectedOrdersByConstellation=new Map();
   extraConstellationData.clear();
@@ -1028,6 +1039,7 @@ function resetDestinationSelections(){
   const note=j('#destinationNote');
   if(note){ note.style.display='none'; note.textContent=''; }
   renderSystemsTable();
+  updatePagesSummaryDisplay();
 }
 
 function refreshDestinationButtonsState(){
@@ -1035,16 +1047,18 @@ function refreshDestinationButtonsState(){
   if(container){
     container.querySelectorAll('button[data-id]').forEach(btn=>{
       const id=Number(btn.dataset.id);
-      if(selectedDestinationIds.has(id)){
-        btn.classList.add('selected');
-        btn.setAttribute('aria-pressed','true');
-      }else{
-        btn.classList.remove('selected');
-        btn.setAttribute('aria-pressed','false');
-      }
+      const entry=getDestinationEntry(id);
+      const isSelected=selectedDestinationIds.has(id);
+      btn.classList.toggle('selected',isSelected);
+      btn.setAttribute('aria-pressed',isSelected?'true':'false');
+      const isLoading=!!entry?.loading;
+      const isLoaded=!!entry?.loaded && !isLoading;
+      btn.classList.toggle('loading',isLoading);
+      btn.classList.toggle('loaded',isLoaded);
     });
   }
   updateDestinationNote();
+  updatePagesSummaryDisplay();
   renderSystemsTable();
 }
 
@@ -1137,7 +1151,15 @@ async function prepareDestinationButtons(){
     }
   });
   entries.sort((a,b)=>String(a.name||a.id).localeCompare(String(b.name||b.id)));
+  entries.forEach(entry=>{
+    entry.loading=false;
+    entry.loaded=connectedOrdersByConstellation.has(entry.id);
+    if(selectedDestinationIds.has(entry.id) && !entry.loaded){
+      entry.loading=true;
+    }
+  });
   destinationEntries=entries;
+  destinationEntryMap=new Map(entries.map(entry=>[entry.id,entry]));
   container.innerHTML=entries.map(entry=>{
     const regionLabel=entry.regionName
       ? `<span class="dest-region">${escapeHtml(entry.regionName)}</span>`
@@ -1154,14 +1176,27 @@ async function prepareDestinationButtons(){
 async function toggleDestinationSelection(id){
   if(!Number.isFinite(id)) return;
   let added=false;
+  const entryRef=getDestinationEntry(id);
   if(selectedDestinationIds.has(id)){
     selectedDestinationIds.delete(id);
+    if(entryRef){
+      entryRef.loading=false;
+    }
   }else{
     selectedDestinationIds.add(id);
     added=true;
+    if(entryRef){
+      if(connectedOrdersByConstellation.has(id)){
+        entryRef.loaded=true;
+        entryRef.loading=false;
+      }else{
+        entryRef.loaded=false;
+        entryRef.loading=true;
+      }
+    }
   }
   if(added){
-    const entry=destinationEntries.find(item=>item?.id===id);
+    const entry=entryRef||destinationEntries.find(item=>item?.id===id);
     if(entry){
       try{ await ensureDestinationPrepared(entry); }
       catch(e){ logError(e); }
@@ -1220,6 +1255,7 @@ function rebuildConnectedOrdersFromSelection(){
   refreshStationFilter();
   refreshConstellationFilter();
   refreshRegionFilter();
+  updatePagesSummaryDisplay();
   render();
   return total;
 }
@@ -1265,6 +1301,22 @@ async function ensureSelectedDestinationOrders(){
     }
     const entriesToFetch=selectedEntries.filter(entry=>!connectedOrdersByConstellation.has(entry.id));
     const newlyFetched=[];
+    let buttonsUpdated=false;
+    if(entriesToFetch.length){
+      entriesToFetch.forEach(entry=>{
+        const cached=getDestinationEntry(entry.id);
+        if(cached){
+          cached.loading=true;
+          cached.loaded=false;
+          buttonsUpdated=true;
+        }
+      });
+    }
+    if(buttonsUpdated){
+      refreshDestinationButtonsState();
+    }else{
+      updatePagesSummaryDisplay();
+    }
     if(entriesToFetch.length){
       const regionGroups=new Map();
       for(const entry of entriesToFetch){
@@ -1286,6 +1338,15 @@ async function ensureSelectedDestinationOrders(){
       }
       for(const group of regionGroups.values()){
         if(!group.stationIds.size) continue;
+        let state=destinationRegionFetchState.get(group.regionId);
+        if(!state){
+          state={totalPages:0,fetchedPages:0};
+          destinationRegionFetchState.set(group.regionId,state);
+        }else{
+          state.totalPages=0;
+          state.fetchedPages=0;
+        }
+        updatePagesSummaryDisplay();
         let page=1,totalPages=1;
         do{
           let result;
@@ -1297,6 +1358,11 @@ async function ensureSelectedDestinationOrders(){
           }
           const {data,pages}=result;
           totalPages=pages||totalPages;
+          if(page===1 || !Number.isFinite(state.totalPages) || state.totalPages!==totalPages){
+            state.totalPages=totalPages;
+          }
+          state.fetchedPages=Math.min(page,totalPages);
+          updatePagesSummaryDisplay();
           for(const order of data){
             if(!group.stationIds.has(order.location_id)) continue;
             const entry=group.stationToConst.get(order.location_id);
@@ -1322,12 +1388,24 @@ async function ensureSelectedDestinationOrders(){
           }
           page++;
         }while(page<=totalPages);
+        if(state.totalPages>0){
+          state.fetchedPages=state.totalPages;
+        }
+        updatePagesSummaryDisplay();
       }
       entriesToFetch.forEach(entry=>{
         if(!connectedOrdersByConstellation.has(entry.id)){
           connectedOrdersByConstellation.set(entry.id,[]);
         }
       });
+      entriesToFetch.forEach(entry=>{
+        const cached=getDestinationEntry(entry.id);
+        if(cached){
+          cached.loading=false;
+          cached.loaded=true;
+        }
+      });
+      refreshDestinationButtonsState();
       if(newlyFetched.length){
         const ids=new Set();
         newlyFetched.forEach(o=>{
@@ -1554,6 +1632,7 @@ async function onConstellationChange(){
   ordersRaw=[];
   destinationCountsReady=false;
   resetDestinationSelections();
+  resetFetchStates();
   baseOrdersLoaded=false;
   render();
   const consId=+j('#constellation').value;
@@ -1621,6 +1700,7 @@ function resetLower(){
   baseOrdersRaw=[];
   connectedOrdersRaw=[];
   syncOrdersRaw();
+  resetFetchStates();
   chartsReady=false;
   loadingConnectedOrders=false;
   baseOrdersLoaded=false;
@@ -1645,6 +1725,12 @@ async function queryMarket(){
   syncOrdersRaw();
   hideConnectedNote();
   updateConnectedButtonState();
+  resetFetchStates();
+  destinationEntryMap.forEach(entry=>{
+    entry.loaded=false;
+    entry.loading=selectedDestinationIds.has(entry.id);
+  });
+  refreshDestinationButtonsState();
   j('#systemNote').style.display='none';
   if(!stationsInConstellation.size){
     j('#systemNote').style.display='block';
@@ -1658,8 +1744,19 @@ async function queryMarket(){
   try{
     const orderType='all';
     const first=await throttleEsiCall(()=>get(`${ESI}/markets/${regionId}/orders/?order_type=${orderType}&page=1`));
-    const totalPages=first.pages||1; filterAndPush(first.data); j('#pagesInfo').textContent=`1 / ${totalPages} páginas`;
-    for(let p=2;p<=totalPages;p++){ const {data}=await throttleEsiCall(()=>get(`${ESI}/markets/${regionId}/orders/?order_type=${orderType}&page=${p}`)); filterAndPush(data); j('#pagesInfo').textContent=`${p} / ${totalPages} páginas`; }
+    const totalPages=first.pages||1;
+    baseFetchState.totalPages=totalPages;
+    baseFetchState.fetchedPages=Math.min(1,totalPages);
+    updatePagesSummaryDisplay();
+    filterAndPush(first.data);
+    for(let p=2;p<=totalPages;p++){
+      const {data}=await throttleEsiCall(()=>get(`${ESI}/markets/${regionId}/orders/?order_type=${orderType}&page=${p}`));
+      baseFetchState.fetchedPages=Math.min(p,totalPages);
+      updatePagesSummaryDisplay();
+      filterAndPush(data);
+    }
+    baseFetchState.fetchedPages=baseFetchState.totalPages||baseFetchState.fetchedPages;
+    updatePagesSummaryDisplay();
     await ensureSelectedDestinationOrders();
     const ids=new Set(); for(const o of ordersRaw){ ids.add(o.type_id); ids.add(o.location_id);} if(ids.size){ const arr=[...ids]; const chunk=900; for(let i=0;i<arr.length;i+=chunk){ const names=await throttleEsiCall(()=>post(`${ESI}/universe/names/`,arr.slice(i,i+chunk))); for(const n of names){ nameCache.set(n.id,n.name);} }}
     refreshSystemFilter();
@@ -1773,8 +1870,7 @@ function getFilteredRows(){ let rows=ordersRaw.map(mapOrder); const f=currentFil
 function render(){
   const tbody=j('#ordersTable tbody');
   const rows=getFilteredRows();
-  j('#ordersCount').textContent=fmtInt(rows.length);
-  if(!ordersRaw.length) j('#pagesInfo').textContent='0 / 0 páginas';
+  updateOrdersCountDisplay(rows.length);
   const disable=rows.length===0;
   j('#exportBtn').disabled=disable;
   j('#chartsBtn').disabled=disable;
@@ -1808,6 +1904,86 @@ function getActiveDestinationConstellationIds(){
   }
   selectedDestinationIds.forEach(id=>{ if(Number.isFinite(id)) active.add(id); });
   return active;
+}
+
+function getDestinationEntry(id){
+  if(!Number.isFinite(id)) return null;
+  return destinationEntryMap.get(id)||null;
+}
+
+function getSelectedDestinationRegionIds(){
+  const regions=new Set();
+  selectedDestinationIds.forEach(id=>{
+    const entry=getDestinationEntry(id);
+    if(!entry) return;
+    const regionId=Number(entry.regionId);
+    if(Number.isFinite(regionId)) regions.add(regionId);
+  });
+  return regions;
+}
+
+function resetFetchStates(){
+  baseFetchState={totalPages:0,fetchedPages:0};
+  destinationRegionFetchState.clear();
+  updatePagesSummaryDisplay();
+}
+
+function updatePagesSummaryDisplay(){
+  const info=j('#pagesInfo');
+  if(!info) return;
+  let total=0;
+  let fetched=0;
+  const baseTotal=Number.isFinite(baseFetchState.totalPages)&&baseFetchState.totalPages>0
+    ? baseFetchState.totalPages
+    : 0;
+  const baseFetched=Number.isFinite(baseFetchState.fetchedPages)&&baseFetchState.fetchedPages>0
+    ? Math.min(baseFetchState.fetchedPages, baseTotal||baseFetchState.fetchedPages)
+    : 0;
+  total+=baseTotal||baseFetched;
+  fetched+=baseFetched;
+  const regionIds=getSelectedDestinationRegionIds();
+  regionIds.forEach(regionId=>{
+    const state=destinationRegionFetchState.get(regionId);
+    if(!state) return;
+    const stateTotal=Number.isFinite(state.totalPages)&&state.totalPages>0?state.totalPages:0;
+    const stateFetched=Number.isFinite(state.fetchedPages)&&state.fetchedPages>0
+      ? Math.min(state.fetchedPages, stateTotal||state.fetchedPages)
+      : 0;
+    total+=stateTotal||stateFetched;
+    fetched+=stateFetched;
+  });
+  if(total<=0){
+    info.textContent='0 / 0 páginas';
+  }else{
+    info.textContent=`${fmtInt(fetched)} / ${fmtInt(total)} páginas`;
+  }
+}
+
+function getTotalOrdersCount(){
+  const baseCount=Array.isArray(baseOrdersRaw)?baseOrdersRaw.length:0;
+  const connectedCount=Array.isArray(connectedOrdersRaw)?connectedOrdersRaw.length:0;
+  return baseCount+connectedCount;
+}
+
+function updateOrdersCountDisplay(filteredCount){
+  const el=j('#ordersCount');
+  if(!el) return;
+  const total=getTotalOrdersCount();
+  const hasFiltered=Number.isFinite(filteredCount);
+  if(hasFiltered&&filteredCount!==total){
+    el.textContent=`${fmtInt(filteredCount)} / ${fmtInt(total)}`;
+    el.setAttribute('data-filtered',String(filteredCount));
+    el.setAttribute('data-total',String(total));
+  }else{
+    const value=hasFiltered?filteredCount:total;
+    el.textContent=fmtInt(value);
+    el.setAttribute('data-total',String(total));
+    if(hasFiltered){
+      el.setAttribute('data-filtered',String(filteredCount));
+    }else{
+      el.removeAttribute('data-filtered');
+    }
+  }
 }
 function buildConstellationRegionLookup(){
   const map=new Map();
