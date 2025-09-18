@@ -716,6 +716,8 @@ async function getConstellationCached(id){
 }
 
 let regions=[],constellations=[],systems=[],stargates=[];
+let baseSystems=[],baseStargates=[];
+const extraConstellationData=new Map();
 let regionNameMap=new Map();
 let constellationNameMap=new Map();
 let currentRegionId=null;
@@ -768,6 +770,221 @@ function updateConstellationNameCache(list){
   }
 }
 
+function isValidConstellationCache(cached){
+  if(!cached) return false;
+  if(!Array.isArray(cached.systems) || !Array.isArray(cached.stargates)) return false;
+  if(cached.systems.length && (!cached.systems[0] || typeof cached.systems[0].pos!=='object')) return false;
+  if(!cached.systems.every(s=>s && typeof s.gatesSameRegion==='number' && typeof s.gatesOtherRegion==='number' && typeof s.totalStargates==='number' && typeof s.otherConstellationGates==='number')) return false;
+  if(cached.stargates.length && !cached.stargates.every(g=>g && typeof g.destSystemId==='number' && g.destConstellation)) return false;
+  return true;
+}
+
+function normalizeSystemRecord(raw){
+  const result={...(raw||{})};
+  if(!result.pos || typeof result.pos!=='object'){
+    result.pos={x:0,y:0};
+  }else{
+    result.pos={
+      x:Number.isFinite(result.pos.x)?result.pos.x:0,
+      y:Number.isFinite(result.pos.y)?result.pos.y:0,
+      z:Number.isFinite(result.pos.z)?result.pos.z:undefined
+    };
+    if(result.pos.z===undefined) delete result.pos.z;
+  }
+  result.gatesSameRegion=Number.isFinite(result.gatesSameRegion)?result.gatesSameRegion:0;
+  result.gatesOtherRegion=Number.isFinite(result.gatesOtherRegion)?result.gatesOtherRegion:0;
+  result.totalStargates=Number.isFinite(result.totalStargates)?result.totalStargates:0;
+  result.otherConstellationGates=Number.isFinite(result.otherConstellationGates)?result.otherConstellationGates:0;
+  result.distinctDestConstellations=Number.isFinite(result.distinctDestConstellations)?result.distinctDestConstellations:0;
+  result.distinctDestRegions=Number.isFinite(result.distinctDestRegions)?result.distinctDestRegions:0;
+  result.destConstellations=Array.isArray(result.destConstellations)
+    ? result.destConstellations.map(dest=>({
+        id:Number.isFinite(dest?.id)?dest.id:null,
+        name:typeof dest?.name==='string'?dest.name:''
+      }))
+    : [];
+  result.destRegions=Array.isArray(result.destRegions)
+    ? result.destRegions.map(dest=>({
+        id:Number.isFinite(dest?.id)?dest.id:null,
+        name:typeof dest?.name==='string'?dest.name:''
+      }))
+    : [];
+  return result;
+}
+
+function mapFromEntries(entries){
+  const map=new Map();
+  if(Array.isArray(entries)){
+    for(const pair of entries){
+      if(!Array.isArray(pair) || pair.length<2) continue;
+      const [stationId,systemId]=pair;
+      map.set(stationId,systemId);
+    }
+  }
+  return map;
+}
+
+async function loadConstellationSystemsData(consId){
+  if(!Number.isFinite(consId)){
+    return {systems:[],stargates:[],stationMap:new Map(),regionId:null};
+  }
+  let consData=null;
+  try{
+    consData=await getConstellationCached(consId);
+  }catch(e){ logError(e); }
+  if(consData?.name && Number.isFinite(consId)){
+    constellationNameMap.set(consId,consData.name);
+  }
+  const regionId=Number(consData?.region_id);
+  if(Number.isFinite(regionId)){
+    const knownRegion=regions.find(r=>r.id===regionId);
+    if(knownRegion?.name) regionNameMap.set(regionId,knownRegion.name);
+  }
+  const cacheKey=`esi.systems.${consId}`;
+  const cached=getCache(cacheKey);
+  if(isValidConstellationCache(cached)){
+    const systemsList=(cached.systems||[]).map(normalizeSystemRecord);
+    const stargateList=Array.isArray(cached.stargates)?cached.stargates.map(g=>({...g})):[];
+    const stationMap=mapFromEntries(cached.stationMap);
+    return {systems:systemsList,stargates:stargateList,stationMap,regionId:Number.isFinite(regionId)?regionId:null};
+  }
+  const systemIds=Array.isArray(consData?.systems)?consData.systems:[];
+  let sysNames=[];
+  if(systemIds.length){
+    try{
+      sysNames=await throttleEsiCall(()=>post(`${ESI}/universe/names/`,systemIds));
+    }catch(e){ logError(e); }
+  }
+  const systemsList=sysNames
+    .filter(x=>x && x.category==="solar_system")
+    .map(x=>({
+      id:x.id,
+      name:x.name,
+      pos:{x:0,y:0},
+      gatesSameRegion:0,
+      gatesOtherRegion:0,
+      totalStargates:0,
+      otherConstellationGates:0,
+      distinctDestConstellations:0,
+      distinctDestRegions:0,
+      destConstellations:[],
+      destRegions:[]
+    }))
+    .sort((a,b)=>String(a.name||a.id).localeCompare(String(b.name||b.id)));
+  const stargateList=[];
+  const stationMap=new Map();
+  for(const system of systemsList){
+    try{
+      const {data:sysDetail}=await throttleEsiCall(()=>get(`${ESI}/universe/systems/${system.id}/`));
+      setCache(`esi.system.${system.id}`,sysDetail);
+      const pos=sysDetail?.position||{};
+      system.pos={
+        x:Number.isFinite(pos.x)?pos.x:0,
+        y:Number.isFinite(pos.y)?pos.y:0
+      };
+      const gateIds=Array.isArray(sysDetail?.stargates)?sysDetail.stargates:[];
+      system.totalStargates=gateIds.length;
+      let sameRegion=0,otherRegion=0,otherConst=0;
+      const destConstSet=new Set();
+      const destRegionSet=new Set();
+      const stations=Array.isArray(sysDetail?.stations)?sysDetail.stations:[];
+      for(const stationId of stations){
+        stationMap.set(stationId,system.id);
+      }
+      for(const gateId of gateIds){
+        const gateKey=`esi.stargate.${gateId}`;
+        let gate=getCache(gateKey);
+        if(!gate){
+          try{
+            const {data:gateDetail}=await throttleEsiCall(()=>get(`${ESI}/universe/stargates/${gateId}/`));
+            gate=gateDetail;
+            setCache(gateKey,gateDetail);
+          }catch(e){ logError(e); continue; }
+        }
+        if(!gate || !gate.destination) continue;
+        const destSystemId=gate.destination.system_id;
+        let destSystem=null;
+        try{ destSystem=await getSystemCached(destSystemId); }
+        catch(e){ logError(e); continue; }
+        let destConst=null;
+        try{ destConst=await getConstellationCached(destSystem.constellation_id); }
+        catch(e){ logError(e); continue; }
+        const destConstId=Number(destSystem.constellation_id);
+        if(Number.isFinite(destConstId) && destConst?.name){
+          constellationNameMap.set(destConstId,destConst.name);
+        }
+        const destRegionId=Number(destConst?.region_id);
+        if(Number.isFinite(destRegionId)){
+          destRegionSet.add(destRegionId);
+          const known=regions.find(r=>r.id===destRegionId);
+          if(known?.name) regionNameMap.set(destRegionId,known.name);
+        }
+        if(Number.isFinite(regionId) && Number.isFinite(destRegionId)){
+          if(destRegionId===regionId) sameRegion++; else otherRegion++;
+        }else{
+          otherRegion++;
+        }
+        if(destConstId!==consId) otherConst++;
+        destConstSet.add(destConstId);
+        const destSystemName=destSystem?.name||destSystemId;
+        const destConstName=destConst?.name||destConstId;
+        const regionLabel=Number.isFinite(destRegionId)
+          ? (regionNameMap.get(destRegionId)||regions.find(r=>r.id===destRegionId)?.name||destRegionId)
+          : '';
+        const linkedGateId=gate.destination?.stargate_id || gateId;
+        stargateList.push({
+          sourceSystemId:system.id,
+          sourceSystem:system.name,
+          gateName:gate.name||gateId,
+          id:linkedGateId,
+          destSystem:destSystemName,
+          destSystemId,
+          destConstellation:destConstName,
+          destConstellationId:destConstId,
+          destRegion:regionLabel,
+          destRegionId:Number.isFinite(destRegionId)?destRegionId:null
+        });
+      }
+      system.gatesSameRegion=sameRegion;
+      system.gatesOtherRegion=otherRegion;
+      system.otherConstellationGates=otherConst;
+      system.distinctDestConstellations=destConstSet.size;
+      system.distinctDestRegions=destRegionSet.size;
+    }catch(e){ logError(e); }
+  }
+  setCache(cacheKey,{systems:systemsList,stationMap:[...stationMap.entries()],stargates:stargateList});
+  return {systems:systemsList,stargates:stargateList,stationMap,regionId:Number.isFinite(regionId)?regionId:null};
+}
+
+function rebuildConstellationAggregates(){
+  const aggregatedSystems=[...baseSystems];
+  const aggregatedStargates=[...baseStargates];
+  selectedDestinationIds.forEach(id=>{
+    const data=extraConstellationData.get(id);
+    if(!data) return;
+    if(Array.isArray(data.systems)) aggregatedSystems.push(...data.systems);
+    if(Array.isArray(data.stargates)) aggregatedStargates.push(...data.stargates);
+  });
+  systems=aggregatedSystems;
+  stargates=aggregatedStargates;
+  destinationCountsReady=false;
+  computeDestinationCounts();
+  renderSystemsTable();
+  renderStargatesTable();
+  if(typeof getFilteredRows==='function'){
+    try{ updateStargateBubble(getFilteredRows()); }
+    catch(e){ logError(e); }
+  }
+}
+
+async function ensureConstellationSystemsData(consId){
+  if(!Number.isFinite(consId)) return null;
+  if(extraConstellationData.has(consId)) return extraConstellationData.get(consId);
+  const data=await loadConstellationSystemsData(consId);
+  extraConstellationData.set(consId,data);
+  return data;
+}
+
 function syncOrdersRaw(){
   ordersRaw = baseOrdersRaw.concat(connectedOrdersRaw);
 }
@@ -803,6 +1020,7 @@ function resetDestinationSelections(){
   destinationEntries=[];
   selectedDestinationIds=new Set();
   connectedOrdersByConstellation=new Map();
+  extraConstellationData.clear();
   const buttons=j('#destinationButtons');
   if(buttons) buttons.innerHTML='';
   const wrap=j('#destinationWrap');
@@ -862,12 +1080,12 @@ async function prepareDestinationButtons(){
   const note=j('#destinationNote');
   if(note){ note.style.display='none'; note.textContent=''; }
   const sourceConstId=currentConstellationId;
-  if(!Number.isFinite(sourceConstId) || !stargates.length){
+  if(!Number.isFinite(sourceConstId) || !baseStargates.length){
     destinationEntries=[];
     return;
   }
   const destMap=new Map();
-  for(const gate of stargates){
+  for(const gate of baseStargates){
     if(!gate) continue;
     let destId=gate.destConstellationId;
     if(destId==null) continue;
@@ -935,11 +1153,38 @@ async function prepareDestinationButtons(){
 
 async function toggleDestinationSelection(id){
   if(!Number.isFinite(id)) return;
+  let added=false;
   if(selectedDestinationIds.has(id)){
     selectedDestinationIds.delete(id);
   }else{
     selectedDestinationIds.add(id);
+    added=true;
   }
+  if(added){
+    const entry=destinationEntries.find(item=>item?.id===id);
+    if(entry){
+      try{ await ensureDestinationPrepared(entry); }
+      catch(e){ logError(e); }
+    }
+    try{
+      const data=await ensureConstellationSystemsData(id);
+      if(data){
+        if(Array.isArray(data.systems)){
+          data.systems.forEach(system=>{
+            if(Number.isFinite(system?.id) && typeof system?.name==='string'){
+              systemNameMap.set(system.id,system.name);
+            }
+          });
+        }
+        if(data.stationMap instanceof Map){
+          data.stationMap.forEach((systemId,stationId)=>{
+            stationToSystem.set(stationId,systemId);
+          });
+        }
+      }
+    }catch(e){ logError(e); }
+  }
+  rebuildConstellationAggregates();
   chartsReady=false;
   refreshDestinationButtonsState();
   hideConnectedNote();
@@ -1299,7 +1544,13 @@ async function onRegionChange(){
 }
 async function onConstellationChange(){
   j('#queryBtn').disabled=true;
-  systems=[]; stargates=[]; stationsInConstellation=new Set(); stationToSystem=new Map(); systemNameMap=new Map();
+  systems=[];
+  stargates=[];
+  baseSystems=[];
+  baseStargates=[];
+  stationsInConstellation=new Set();
+  stationToSystem=new Map();
+  systemNameMap=new Map();
   ordersRaw=[];
   destinationCountsReady=false;
   resetDestinationSelections();
@@ -1320,89 +1571,37 @@ async function onConstellationChange(){
     currentConstellationId=null;
     currentConstellationName='';
   }
-  const cacheKey=`esi.systems.${consId}`;
-  const cached=getCache(cacheKey);
   const sysSel=j('#fSystem');
-  if(cached &&
-     cached.systems &&
-     cached.stargates &&
-     (cached.stargates.length===0 || cached.stargates.every(g=>g && g.destConstellation && typeof g.destSystemId==="number")) &&
-     cached.systems[0] &&
-     cached.systems[0].pos &&
-     cached.systems.every(s=>typeof s.gatesSameRegion==="number" && typeof s.gatesOtherRegion==="number" && typeof s.totalStargates==="number" && typeof s.otherConstellationGates==="number")){
-    systems=cached.systems;
-    stargates=cached.stargates;
-    stationToSystem=new Map(cached.stationMap);
-    stationsInConstellation=new Set(cached.stationMap.map(p=>p[0]));
-    systemNameMap=new Map(systems.map(s=>[s.id,s.name]));
-    computeDestinationCounts();
-    sysSel.innerHTML = `<option value="all">Todos</option>` + systems.map(s=>`<option value="${s.id}">${s.name}</option>`).join("");
-    renderSystemsTable();
-    renderStargatesTable();
-    updateStargateBubble(getFilteredRows());
-    await prepareDestinationButtons();
+  if(!Number.isFinite(consId)){
+    rebuildConstellationAggregates();
+    if(sysSel) sysSel.innerHTML='<option value="all">Todos</option>';
     j('#queryBtn').disabled=false;
     return;
   }
-  const {data:cons}=await throttleEsiCall(()=>get(`${ESI}/universe/constellations/${consId}/`));
-  if(cons?.name){
-    currentConstellationName=cons.name;
-    if(Number.isFinite(consId)) constellationNameMap.set(consId,cons.name);
+  let data=null;
+  try{
+    data=await loadConstellationSystemsData(consId);
+  }catch(e){ logError(e); }
+  if(!data){
+    data={systems:[],stargates:[],stationMap:new Map()};
   }
-  const sysNames=await throttleEsiCall(()=>post(`${ESI}/universe/names/`,cons.systems));
-  systems=sysNames.filter(x=>x.category==="solar_system").map(x=>({id:x.id,name:x.name,pos:{x:0,y:0},gatesSameRegion:0,gatesOtherRegion:0,totalStargates:0,otherConstellationGates:0})).sort((a,b)=>a.name.localeCompare(b.name));
-  systems.forEach(s=>systemNameMap.set(s.id,s.name));
-  renderSystemsTable();
-  const regionId=+j('#region').value;
-  for(const s of systems){
-    const {data:sysd}=await throttleEsiCall(()=>get(`${ESI}/universe/systems/${s.id}/`));
-    setCache(`esi.system.${s.id}`,sysd);
-    const st=sysd.stations||[];
-    s.pos={x:sysd.position.x,y:sysd.position.y};
-    let gw=0,go=0;
-    const gateIds=sysd.stargates||[];
-    s.totalStargates=gateIds.length;
-    let otherConstellationGates=0;
-    const destConstSet=new Set();
-    const destRegionSet=new Set();
-    for(const gId of gateIds){
-      const gKey=`esi.stargate.${gId}`;
-      let gate=getCache(gKey);
-      if(!gate){
-        try{ const {data:gd}=await throttleEsiCall(()=>get(`${ESI}/universe/stargates/${gId}/`)); gate=gd; setCache(gKey,gate);}catch(e){ logError(e); continue; }
-      }
-      if(gate && gate.destination){
-        const destId=gate.destination.system_id;
-        let dest;
-        try{ dest=await getSystemCached(destId); }
-        catch(e){ logError(e); continue; }
-        let cons;
-        try{ cons=await getConstellationCached(dest.constellation_id); }
-        catch(e){ logError(e); continue; }
-        const destRegion=regions.find(r=>r.id===cons.region_id)?.name||cons.region_id;
-        if(cons.region_id===regionId) gw++; else go++;
-        if(dest.constellation_id!==consId) otherConstellationGates++;
-        destConstSet.add(dest.constellation_id);
-        destRegionSet.add(cons.region_id);
-        const destName=dest.name||destId;
-        const destConstName=cons.name||dest.constellation_id;
-        const destGateId=gate.destination?.stargate_id || gId;
-        stargates.push({sourceSystemId:s.id, sourceSystem:s.name, gateName:gate.name||gId, id:destGateId, destSystem:destName, destSystemId:destId, destConstellation:destConstName, destConstellationId:dest.constellation_id, destRegion, destRegionId:cons.region_id});
-      }
+  baseSystems=Array.isArray(data.systems)?data.systems:[];
+  baseStargates=Array.isArray(data.stargates)?data.stargates:[];
+  const stationEntries=data.stationMap instanceof Map? [...data.stationMap.entries()]: (Array.isArray(data.stationMap)?data.stationMap:[]);
+  stationToSystem=new Map(stationEntries);
+  stationsInConstellation=new Set(stationEntries.map(entry=>entry[0]));
+  systemNameMap=new Map();
+  baseSystems.forEach(s=>{
+    if(Number.isFinite(s?.id) && typeof s?.name==='string'){
+      systemNameMap.set(s.id,s.name);
     }
-    s.gatesSameRegion=gw; s.gatesOtherRegion=go; s.otherConstellationGates=otherConstellationGates;
-    s.distinctDestConstellations=destConstSet.size;
-    s.distinctDestRegions=destRegionSet.size;
-    for(const stid of st){ stationsInConstellation.add(stid); stationToSystem.set(stid,s.id);}
+  });
+  rebuildConstellationAggregates();
+  if(sysSel){
+    sysSel.innerHTML = `<option value="all">Todos</option>` + baseSystems.map(s=>`<option value="${s.id}">${s.name}</option>`).join("");
   }
-  renderSystemsTable();
-  renderStargatesTable();
-  computeDestinationCounts();
-  updateStargateBubble(getFilteredRows());
-  sysSel.innerHTML = `<option value="all">Todos</option>` + systems.map(s=>`<option value="${s.id}">${s.name}</option>`).join("");
   await prepareDestinationButtons();
   j('#queryBtn').disabled=false;
-  setCache(cacheKey,{systems,stationMap:[...stationToSystem.entries()],stargates});
 }
 function resetLower(){
   j('#constellation').disabled=true;
@@ -1415,6 +1614,8 @@ function resetLower(){
   systemNameMap=new Map();
   systems=[];
   stargates=[];
+  baseSystems=[];
+  baseStargates=[];
   destinationCountsReady=false;
   resetDestinationSelections();
   baseOrdersRaw=[];
@@ -2477,7 +2678,7 @@ async function loadConnectedConstellationOrders(){
     const prevConnectedCount=connectedOrdersRaw.length;
     const sourceConsId=+j('#constellation').value;
     const destinationMap=new Map();
-    for(const gate of stargates){
+    for(const gate of baseStargates){
       if(!gate) continue;
       const destConstId=gate.destConstellationId;
       if(!destConstId || destConstId===sourceConsId) continue;
