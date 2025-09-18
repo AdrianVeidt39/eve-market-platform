@@ -74,12 +74,6 @@
           <select id="constellation" disabled></select>
         </div>
       </div>
-      <div class="controls">
-        <button id="queryBtn" class="btn" disabled>Consultar mercado</button>
-        <div id="busyHint" class="right muted" style="display:none">
-          <div class="spinner"></div><span>Consultando órdenes del mercado regional…</span>
-        </div>
-      </div>
       <div id="destinationWrap" class="destinations">
         <div class="destinations-title">Constelaciones destino identificadas</div>
         <div id="destinationButtons" class="destination-buttons"></div>
@@ -88,6 +82,12 @@
       <p class="note">
         Al abrir sólo se cargan catálogos. Al elegir <b>región</b> se piden sus constelaciones. Al elegir <b>constelación</b> se calcularán los <b> sistemas y estaciones NPC </b> que contiene. La consulta de órdenes sólo ocurre tras pulsar <b>Consultar mercado</b>.
       </p>
+      <div class="controls">
+        <button id="queryBtn" class="btn" disabled>Consultar mercado</button>
+        <div id="busyHint" class="right muted" style="display:none">
+          <div class="spinner"></div><span>Consultando órdenes del mercado regional…</span>
+        </div>
+      </div>
     </div>
 
     <div id="analytics" class="card" style="margin-top:16px;display:none">
@@ -197,13 +197,13 @@
     <div class="card" style="margin-top:16px">
       <div class="section-title">Órdenes encontradas</div>
       <div class="controls">
-        <button id="chartsBtn" class="btn" disabled>Generar gráficas</button>
         <div class="stats">
           <span class="chip"><span id="ordersCount">0</span> órdenes</span>
           <span class="chip"><span id="pagesInfo">0 / 0 páginas</span></span>
         </div>
         <div class="right">
           <button id="connectedOrdersBtn" class="btn" disabled>Constelaciones destino</button>
+          <button id="chartsBtn" class="btn" disabled>Generar gráficas</button>
           <button id="exportBtn" class="btn" disabled>Exportar CSV</button>
         </div>
       </div>
