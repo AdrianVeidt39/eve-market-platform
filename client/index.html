@@ -2548,12 +2548,24 @@ function updateStargateBubble(rows=[]){
       scales:{
         x:{
           type:'logarithmic',
-          min:0,
+          min:1,
+          afterBuildTicks(scale){
+            const ticks=scale.ticks||[];
+            if(!ticks.some(t=>t?.value===1)){
+              scale.ticks=[{value:1}].concat(ticks);
+            }
+          },
           title:{display:true,text:'Órdenes totales'},
           ticks:{
             callback(value){
-              if(value===1) return '0';
-              return fmtInt(value);
+              const num=Number(value);
+              if(!Number.isFinite(num)||num<=0) return '';
+              if(num===1) return '0 (sin órdenes)';
+              const exp=Math.floor(Math.log10(num));
+              const base=num/Math.pow(10,exp);
+              const isKeyTick=Math.abs(base-1)<1e-6||Math.abs(base-2)<1e-6||Math.abs(base-5)<1e-6;
+              if(isKeyTick) return fmtInt(num);
+              return '';
             }
           }
         },
