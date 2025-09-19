@@ -40,9 +40,22 @@
   .section-title{font-weight:700;margin:18px 0 10px}
   .stats{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:12px}
   .chip{background:var(--chip);border:1px solid var(--border);padding:6px 10px;border-radius:999px}
-    .table-wrap{overflow:auto;border:1px solid var(--border);border-radius:12px}
-    table{width:100%;border-collapse:collapse;min-width:1080px}
-    .table-small{min-width:0;width:100%;}
+  .table-wrap{overflow:auto;border:1px solid var(--border);border-radius:12px;background:var(--panel)}
+  .table-wrap.collapsible{overflow:hidden;padding:0}
+  .table-wrap.collapsible .collapse-content{display:none;border-top:1px solid var(--border);overflow:auto;background:var(--panel)}
+  .table-wrap.collapsible.open .collapse-content{display:block}
+  .collapse-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 16px;background:rgba(12,19,28,0.85);color:var(--text);border:none;font:inherit;font-weight:600;cursor:pointer;text-align:left;transition:background .2s}
+  .collapse-toggle:hover{background:rgba(48,163,255,0.1)}
+  .table-wrap.collapsible.open .collapse-toggle{background:rgba(48,163,255,0.15)}
+  .collapse-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .collapse-title{font-size:13px}
+  .collapse-meta{display:flex;align-items:center;gap:6px}
+  .collapse-action{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+  .table-wrap.collapsible.open .collapse-action{color:var(--accent)}
+  .collapse-icon{font-size:12px;line-height:1;transition:transform .2s}
+  .table-wrap.collapsible.open .collapse-icon{transform:rotate(180deg)}
+  table{width:100%;border-collapse:collapse;min-width:1080px}
+  .table-small{min-width:0;width:100%;}
   thead th{position:sticky;top:0;background:#0e1520;border-bottom:1px solid var(--border);padding:12px;font-size:12px;text-align:left;user-select:none}
   thead tr.head th{cursor:pointer;top:0;z-index:3}
   thead tr.filters th{top:44px;z-index:2;background:#0e1520;cursor:default;padding:8px}
@@ -127,68 +140,92 @@
           <p id="chartVolBottomNote" class="note" style="display:none"></p>
         </div>
       </div>
-    <div id="systemsTableWrap" class="table-wrap" style="display:none;margin-bottom:16px">
-      <table id="systemsTable">
-        <caption>Sistemas</caption>
-        <thead>
-          <tr>
-            <th>Sistema</th>
-            <th>ID</th>
-            <th>Total de stargates</th>
-            <th>Regiones destino distintas al filtro</th>
-            <th>Constelaciones destino distintas al filtro</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
+    <div id="systemsTableWrap" class="table-wrap collapsible" style="display:none;margin-bottom:16px" data-collapsible>
+      <button type="button" class="collapse-toggle" aria-expanded="false">
+        <span class="collapse-title">Sistemas</span>
+        <span class="collapse-meta"><span class="collapse-action">Mostrar</span><span class="collapse-icon" aria-hidden="true">▼</span></span>
+      </button>
+      <div class="collapse-content" aria-hidden="true">
+        <table id="systemsTable">
+          <caption>Sistemas</caption>
+          <thead>
+            <tr>
+              <th>Sistema</th>
+              <th>ID</th>
+              <th>Total de stargates</th>
+              <th>Regiones destino distintas al filtro</th>
+              <th>Constelaciones destino distintas al filtro</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </div>
-    <div id="stargatesTableWrap" class="table-wrap" style="display:none;margin-bottom:16px">
-      <table id="stargatesTable">
-        <caption>Stargates</caption>
-        <thead>
-          <tr>
-            <th>Sistema origen</th>
-            <th>Stargate</th>
-            <th>ID del Stargate destino</th>
-            <th>Sistema destino</th>
-            <th>Constelación destino</th>
-            <th>Región destino</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
+    <div id="stargatesTableWrap" class="table-wrap collapsible" style="display:none;margin-bottom:16px" data-collapsible>
+      <button type="button" class="collapse-toggle" aria-expanded="false">
+        <span class="collapse-title">Stargates</span>
+        <span class="collapse-meta"><span class="collapse-action">Mostrar</span><span class="collapse-icon" aria-hidden="true">▼</span></span>
+      </button>
+      <div class="collapse-content" aria-hidden="true">
+        <table id="stargatesTable">
+          <caption>Stargates</caption>
+          <thead>
+            <tr>
+              <th>Sistema origen</th>
+              <th>Stargate</th>
+              <th>ID del Stargate destino</th>
+              <th>Sistema destino</th>
+              <th>Constelación destino</th>
+              <th>Región destino</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </div>
     <div id="stargateBubbleWrap" style="display:none;margin-bottom:16px">
       <canvas id="chartStargateBubble" style="height:360px"></canvas>
     </div>
     <p id="chartStargateBubbleNote" class="note" style="display:none"></p>
     <div id="boxplotTables" class="row" style="display:none;margin:16px 0;grid-template-columns:1fr">
-      <div id="priceBoxWrap" class="table-wrap">
-        <table id="priceBoxTable" class="table-small">
-          <caption>Resumen box plot · Top 10 por precio (por artículo)</caption>
-          <thead>
-            <tr>
-              <th>Métrica</th>
-              <th>Valor</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
+      <div id="priceBoxWrap" class="table-wrap collapsible" data-collapsible>
+        <button type="button" class="collapse-toggle" aria-expanded="false">
+          <span class="collapse-title">Resumen box plot · Top 10 por precio (por artículo)</span>
+          <span class="collapse-meta"><span class="collapse-action">Mostrar</span><span class="collapse-icon" aria-hidden="true">▼</span></span>
+        </button>
+        <div class="collapse-content" aria-hidden="true">
+          <table id="priceBoxTable" class="table-small">
+            <caption>Resumen box plot · Top 10 por precio (por artículo)</caption>
+            <thead>
+              <tr>
+                <th>Métrica</th>
+                <th>Valor</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
       <div id="priceBoxChartWrap" style="display:none;margin:16px 0;border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--panel)">
         <canvas id="chartPriceBoxMetrics" style="width:100%;height:180px"></canvas>
       </div>
-      <div id="ordersBoxWrap" class="table-wrap">
-        <table id="ordersBoxTable" class="table-small">
-          <caption>Resumen box plot · Top 10 por órdenes (precios por artículo)</caption>
-          <thead>
-            <tr>
-              <th>Métrica</th>
-              <th>Valor</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
+      <div id="ordersBoxWrap" class="table-wrap collapsible" data-collapsible>
+        <button type="button" class="collapse-toggle" aria-expanded="false">
+          <span class="collapse-title">Resumen box plot · Top 10 por órdenes (precios por artículo)</span>
+          <span class="collapse-meta"><span class="collapse-action">Mostrar</span><span class="collapse-icon" aria-hidden="true">▼</span></span>
+        </button>
+        <div class="collapse-content" aria-hidden="true">
+          <table id="ordersBoxTable" class="table-small">
+            <caption>Resumen box plot · Top 10 por órdenes (precios por artículo)</caption>
+            <thead>
+              <tr>
+                <th>Métrica</th>
+                <th>Valor</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
       <div id="ordersBoxChartWrap" style="display:none;margin:16px 0;border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--panel)">
         <canvas id="chartOrdersBoxMetrics" style="width:100%;height:180px"></canvas>
@@ -213,66 +250,72 @@
           <button id="exportBtn" class="btn" disabled>Exportar CSV</button>
         </div>
       </div>
-      <div class="table-wrap">
-        <table id="ordersTable">
-          <caption>Órdenes</caption>
-          <thead>
-            <tr class="head">
-              <th class="sortable" data-k="type_name">Artículo</th>
-              <th class="sortable" data-k="order_type">Orden</th>
-              <th class="sortable" data-k="price">Precio</th>
-              <th class="sortable" data-k="volume_remain">Unidades</th>
-              <th class="sortable" data-k="min_volume">Mínimo de compra</th>
-              <th class="sortable" data-k="range">Rango</th>
-              <th class="sortable" data-k="system_name">Sistema</th>
-              <th class="sortable" data-k="constellation_name">Constelación</th>
-              <th class="sortable" data-k="region_name">Región</th>
-              <th class="sortable" data-k="station_name">Estación</th>
-              <th class="sortable" data-k="issued">Emitida</th>
-              <th class="sortable" data-k="duration">Duración</th>
-            </tr>
-            <tr class="filters">
-              <th><input id="fType" type="text" placeholder="Artículo (ej. Antimatter)"/></th>
-              <th>
-                <select id="fSide">
-                  <option value="all">Todas</option>
-                  <option value="sell">Venta</option>
-                  <option value="buy">Compra</option>
-                </select>
-              </th>
-                <th><div class="field"><input id="fPriceMin" type="number" placeholder="Precio mín." step="0.01"/><input id="fPriceMax" type="number" placeholder="Precio máx." step="0.01"/></div></th>
-                <th><div class="field"><input id="fVolMin" type="number" placeholder="Unidades mín."/><input id="fVolMax" type="number" placeholder="Unidades máx."/></div></th>
-                <th><div class="field"><input id="fMinMin" type="number" placeholder="Compra mín."/><input id="fMinMax" type="number" placeholder="Compra máx."/></div></th>
-              <th>
-                <select id="fRange">
-                  <option value="all">Todos</option>
-                  <option>station</option><option>solarsystem</option><option>region</option>
-                  <option>1</option><option>2</option><option>3</option><option>5</option><option>10</option><option>20</option><option>40</option>
-                </select>
-              </th>
-              <th><select id="fSystem"><option value="all">Todos</option></select></th>
-              <th><select id="fConstellation"><option value="all">Todas</option></select></th>
-              <th><select id="fRegion"><option value="all">Todas</option></select></th>
-              <th><select id="fStation"><option value="all">Todas</option></select></th>
-              <th>
-                <select id="fIssued">
-                  <option value="all">Todas</option>
-                  <option value="24h">Últimas 24h</option>
-                  <option value="7d">Últimos 7 días</option>
-                  <option value="30d">Últimos 30 días</option>
-                </select>
-              </th>
-              <th>
-                <select id="fDuration">
-                  <option value="all">Todas</option>
-                  <option>1</option><option>3</option><option>7</option><option>14</option>
-                  <option>30</option><option>60</option><option>90</option>
-                </select>
-              </th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
+      <div class="table-wrap collapsible" data-collapsible>
+        <button type="button" class="collapse-toggle" aria-expanded="false">
+          <span class="collapse-title">Órdenes</span>
+          <span class="collapse-meta"><span class="collapse-action">Mostrar</span><span class="collapse-icon" aria-hidden="true">▼</span></span>
+        </button>
+        <div class="collapse-content" aria-hidden="true">
+          <table id="ordersTable">
+            <caption>Órdenes</caption>
+            <thead>
+              <tr class="head">
+                <th class="sortable" data-k="type_name">Artículo</th>
+                <th class="sortable" data-k="order_type">Orden</th>
+                <th class="sortable" data-k="price">Precio</th>
+                <th class="sortable" data-k="volume_remain">Unidades</th>
+                <th class="sortable" data-k="min_volume">Mínimo de compra</th>
+                <th class="sortable" data-k="range">Rango</th>
+                <th class="sortable" data-k="system_name">Sistema</th>
+                <th class="sortable" data-k="constellation_name">Constelación</th>
+                <th class="sortable" data-k="region_name">Región</th>
+                <th class="sortable" data-k="station_name">Estación</th>
+                <th class="sortable" data-k="issued">Emitida</th>
+                <th class="sortable" data-k="duration">Duración</th>
+              </tr>
+              <tr class="filters">
+                <th><input id="fType" type="text" placeholder="Artículo (ej. Antimatter)"/></th>
+                <th>
+                  <select id="fSide">
+                    <option value="all">Todas</option>
+                    <option value="sell">Venta</option>
+                    <option value="buy">Compra</option>
+                  </select>
+                </th>
+                  <th><div class="field"><input id="fPriceMin" type="number" placeholder="Precio mín." step="0.01"/><input id="fPriceMax" type="number" placeholder="Precio máx." step="0.01"/></div></th>
+                  <th><div class="field"><input id="fVolMin" type="number" placeholder="Unidades mín."/><input id="fVolMax" type="number" placeholder="Unidades máx."/></div></th>
+                  <th><div class="field"><input id="fMinMin" type="number" placeholder="Compra mín."/><input id="fMinMax" type="number" placeholder="Compra máx."/></div></th>
+                <th>
+                  <select id="fRange">
+                    <option value="all">Todos</option>
+                    <option>station</option><option>solarsystem</option><option>region</option>
+                    <option>1</option><option>2</option><option>3</option><option>5</option><option>10</option><option>20</option><option>40</option>
+                  </select>
+                </th>
+                <th><select id="fSystem"><option value="all">Todos</option></select></th>
+                <th><select id="fConstellation"><option value="all">Todas</option></select></th>
+                <th><select id="fRegion"><option value="all">Todas</option></select></th>
+                <th><select id="fStation"><option value="all">Todas</option></select></th>
+                <th>
+                  <select id="fIssued">
+                    <option value="all">Todas</option>
+                    <option value="24h">Últimas 24h</option>
+                    <option value="7d">Últimos 7 días</option>
+                    <option value="30d">Últimos 30 días</option>
+                  </select>
+                </th>
+                <th>
+                  <select id="fDuration">
+                    <option value="all">Todas</option>
+                    <option>1</option><option>3</option><option>7</option><option>14</option>
+                    <option>30</option><option>60</option><option>90</option>
+                  </select>
+                </th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
       <p id="systemNote" class="note" style="display:none"></p>
       <p id="connectedNote" class="note" style="display:none"></p>
@@ -318,6 +361,30 @@ function processEsiQueue(){
   });
 }
 const palette = ['#30a3ff','#00d1b2','#ff6b6b','#ffc107','#9b59b6','#e67e22','#2ecc71','#f39c12','#8e44ad','#1abc9c'];
+
+function setupTableCollapsibles(){
+  const wraps=document.querySelectorAll('.table-wrap.collapsible[data-collapsible]');
+  wraps.forEach(wrap=>{
+    const button=wrap.querySelector('.collapse-toggle');
+    const content=wrap.querySelector('.collapse-content');
+    if(!button||!content) return;
+    const action=button.querySelector('.collapse-action');
+    const updateState=()=>{
+      const open=wrap.classList.contains('open');
+      button.setAttribute('aria-expanded',open?'true':'false');
+      content.setAttribute('aria-hidden',open?'false':'true');
+      if(action) action.textContent=open?'Ocultar':'Mostrar';
+    };
+    wrap.classList.remove('open');
+    updateState();
+    button.addEventListener('click',()=>{
+      wrap.classList.toggle('open');
+      updateState();
+    });
+  });
+}
+
+setupTableCollapsibles();
 const styles = getComputedStyle(document.documentElement);
 const accentColor = styles.getPropertyValue('--accent') || '#30a3ff';
 const accent2Color = styles.getPropertyValue('--accent2') || '#00d1b2';
