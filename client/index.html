@@ -324,7 +324,11 @@
 
 <script>
 const ESI = "https://esi.evetech.net/latest";
-const USER_AGENT = "EVE Market Explorer (leo.devo@live.com.mx)";
+const APP_VERSION = '1.0.0';
+const USER_AGENT = `EVE Market Explorer/${APP_VERSION} (leo.devo@live.com.mx)`;
+const ESI_COMPATIBILITY_DATE = '2026-02-19';
+const ESI_USER_AGENT_QUERY_PARAM = 'user_agent';
+const ESI_COMPATIBILITY_QUERY_PARAM = 'compatibility_date';
 const j = s=>document.querySelector(s);
 const fmtPrice = n=>Number(n).toLocaleString("es-MX",{maximumFractionDigits:2});
 const fmtInt = n=>Number(n).toLocaleString("es-MX",{maximumFractionDigits:0});
@@ -659,7 +663,21 @@ function clearCache(){
 
 window.clearEsiCache=clearCache;
 
+function appendQueryParam(rawUrl,key,value){
+  if(!rawUrl || value==null || value==='') return rawUrl;
+  try{
+    const parsed=new URL(rawUrl,typeof window!=='undefined'&&window.location?window.location.origin:undefined);
+    if(!parsed.searchParams.has(key)) parsed.searchParams.set(key,String(value));
+    return parsed.toString();
+  }catch(_){
+    const hasQuery=String(rawUrl).includes('?');
+    const joiner=hasQuery?'&':'?';
+    return `${rawUrl}${joiner}${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`;
+  }
+}
+
 async function fetchWithRetry(url, opts = {}, maxRetries = 3) {
+  let requestUrl=url;
   const finalOpts = { ...opts };
   const isBrowser = typeof window !== "undefined" && typeof window.document !== "undefined";
   if (typeof Headers !== "undefined") {
@@ -681,28 +699,40 @@ async function fetchWithRetry(url, opts = {}, maxRetries = 3) {
         headers.set(key, value);
       }
     }
-    if (!headers.has("Accept-Language")) headers.set("Accept-Language", "en");
-    if (!isBrowser && !headers.has("User-Agent")) headers.set("User-Agent", USER_AGENT);
+    if (!headers.has('Accept-Language')) headers.set('Accept-Language', 'en');
+    if (!headers.has('X-Compatibility-Date')) headers.set('X-Compatibility-Date', ESI_COMPATIBILITY_DATE);
+    if (isBrowser) {
+      if (!headers.has('X-User-Agent')) headers.set('X-User-Agent', USER_AGENT);
+    } else if (!headers.has('User-Agent')) {
+      headers.set('User-Agent', USER_AGENT);
+    }
     finalOpts.headers = headers;
   } else {
     const headers = { ...(opts.headers || {}) };
-    if (!("Accept-Language" in headers)) headers["Accept-Language"] = "en";
+    const hasHeader = name => Object.keys(headers).some(key => key.toLowerCase() === name.toLowerCase());
+    if (!hasHeader('Accept-Language')) headers['Accept-Language'] = 'en';
+    if (!hasHeader('X-Compatibility-Date')) headers['X-Compatibility-Date'] = ESI_COMPATIBILITY_DATE;
     if (isBrowser) {
-      delete headers["User-Agent"];
-    } else if (!("User-Agent" in headers)) {
-      headers["User-Agent"] = USER_AGENT;
+      Object.keys(headers).forEach(key=>{ if(key.toLowerCase()==='user-agent') delete headers[key]; });
+      if (!hasHeader('X-User-Agent')) headers['X-User-Agent'] = USER_AGENT;
+    } else if (!hasHeader('User-Agent')) {
+      headers['User-Agent'] = USER_AGENT;
     }
     finalOpts.headers = headers;
+    requestUrl=appendQueryParam(requestUrl,ESI_COMPATIBILITY_QUERY_PARAM,ESI_COMPATIBILITY_DATE);
+    if(isBrowser){
+      requestUrl=appendQueryParam(requestUrl,ESI_USER_AGENT_QUERY_PARAM,USER_AGENT);
+    }
   }
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     let res;
     try {
-      res = await fetch(url, finalOpts);
+      res = await fetch(requestUrl, finalOpts);
     } catch (err) {
-      if (LOG_ESI) logError(`[ESI] fetch error ${url} (try ${attempt}/${maxRetries}):`, err);
+      if (LOG_ESI) logError(`[ESI] fetch error ${requestUrl} (try ${attempt}/${maxRetries}):`, err);
       if (attempt === maxRetries) throw err;
       const delay = 500 * 2 ** attempt;
-      if (LOG_ESI) logWarn(`[ESI] retry ${url} after error; waiting ${delay}ms`);
+      if (LOG_ESI) logWarn(`[ESI] retry ${requestUrl} after error; waiting ${delay}ms`);
       await sleep(delay);
       continue;
     }
@@ -711,17 +741,17 @@ async function fetchWithRetry(url, opts = {}, maxRetries = 3) {
     const hasValidReset = Number.isFinite(reset) && reset > 0;
     const resetMs = hasValidReset ? reset * 1000 : 1000;
     const resetLogNote = hasValidReset ? "" : " (retardo mínimo aplicado)";
-    if (LOG_ESI) logInfo(`[ESI] ${url} -> ${res.status} (try ${attempt}/${maxRetries})`);
+    if (LOG_ESI) logInfo(`[ESI] ${requestUrl} -> ${res.status} (try ${attempt}/${maxRetries})`);
     if (![420, 429, 503].includes(res.status)) {
       if (remain <= 1) {
-        if (LOG_ESI) logWarn(`[ESI] límite de error bajo tras ${url}; esperando ${resetMs}ms${resetLogNote}`);
+        if (LOG_ESI) logWarn(`[ESI] límite de error bajo tras ${requestUrl}; esperando ${resetMs}ms${resetLogNote}`);
         await sleep(resetMs);
       }
       return res;
     }
-    if (attempt === maxRetries) throw new Error(`HTTP ${res.status} ${url}`);
+    if (attempt === maxRetries) throw new Error(`HTTP ${res.status} ${requestUrl}`);
     const delay = remain <= 1 ? resetMs : 500 * 2 ** attempt;
-    if (LOG_ESI) logWarn(`[ESI] retry ${url} -> ${res.status}; waiting ${delay}ms${remain <= 1 ? resetLogNote : ""}`);
+    if (LOG_ESI) logWarn(`[ESI] retry ${requestUrl} -> ${res.status}; waiting ${delay}ms${remain <= 1 ? resetLogNote : ""}`);
     await sleep(delay);
   }
 }
