@@ -50,6 +50,18 @@ One-command sync + commit + push:
 bash sync-local.sh --with-agents --commit "Sync local workspace files" --push
 ```
 
+Windows helper commands:
+
+```bat
+sync-local.cmd
+syncp.cmd
+```
+
+OpenCode custom command:
+- `/syncp` is defined in `.opencode/commands/syncp.md`.
+- Prefer using `/syncp` explicitly instead of always-auto-sync to avoid
+  accidental commits/pushes.
+
 ### Build
 - Not configured.
 
@@ -90,7 +102,7 @@ Run these checks in a browser after changes:
 - CSV export still downloads expected content.
 
 ## Code Style
-`index.html` is the source of truth. Make minimal, targeted edits and avoid
+`client/index.html` is the source of truth. Make minimal, targeted edits and avoid
 reformatting unrelated blocks.
 
 ### Language

@@ -5,17 +5,20 @@ usage() {
   cat <<'EOF'
 Usage:
   bash sync-local.sh [--source <path>] [--with-agents] [--commit <message>] [--push]
+  bash sync-local.sh --syncp [--source <path>] [--commit <message>]
 
 Options:
   --source <path>     Source folder to sync from (default: parent folder ../)
   --with-agents       Also copy AGENTS.md from source to repo root
   --commit <message>  Create commit after syncing with given message
   --push              Push current branch after a successful commit
+  --syncp             Preset for publish: --with-agents + default commit + --push
   -h, --help          Show this help
 
 Examples:
   bash sync-local.sh
   bash sync-local.sh --with-agents
+  bash sync-local.sh --syncp
   bash sync-local.sh --with-agents --commit "Sync local workspace files" --push
 EOF
 }
@@ -25,6 +28,7 @@ source_dir="${repo_dir}/.."
 with_agents='false'
 commit_message=''
 should_push='false'
+default_syncp_message='Sync local workspace files'
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -52,6 +56,14 @@ while [[ $# -gt 0 ]]; do
       should_push='true'
       shift
       ;;
+    --syncp)
+      with_agents='true'
+      should_push='true'
+      if [[ -z "$commit_message" ]]; then
+        commit_message="$default_syncp_message"
+      fi
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -63,6 +75,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ "$should_push" == 'true' && -z "$commit_message" ]]; then
+  echo "Error: --push requires --commit <message> or --syncp" >&2
+  exit 1
+fi
 
 if [[ ! -d "$source_dir" ]]; then
   echo "Error: source directory not found: $source_dir" >&2

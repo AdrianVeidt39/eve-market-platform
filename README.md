@@ -18,6 +18,21 @@ If your editable workspace is in the parent folder (`../`) and this repository i
 bash sync-local.sh
 ```
 
+Windows (CMD) wrappers:
+
+```bat
+sync-local.cmd
+syncp.cmd
+```
+
+OpenCode custom command:
+
+```text
+/syncp
+```
+
+This command is defined in `.opencode/commands/syncp.md` and runs the publish preset (`bash sync-local.sh --syncp`).
+
 Include local `AGENTS.md`, then commit and push in one command:
 
 ```bash
