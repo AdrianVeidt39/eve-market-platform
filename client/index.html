@@ -628,6 +628,7 @@ const LOG_ESI = (() => {
 })();
 
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 24h
+const HTTP_CACHE_PREFIX = 'esi.http.';
 
 function getCache(key){
   if(typeof localStorage==='undefined') return null;
@@ -662,6 +663,83 @@ function clearCache(){
 }
 
 window.clearEsiCache=clearCache;
+
+function parseHttpDate(value){
+  if(typeof value!=='string' || !value.trim()) return null;
+  const parsed=Date.parse(value);
+  return Number.isFinite(parsed)?parsed:null;
+}
+
+function parseMaxAgeFromCacheControl(value){
+  if(typeof value!=='string' || !value.trim()) return null;
+  const match=value.match(/(?:^|,)\s*max-age\s*=\s*(\d+)\s*(?:,|$)/i);
+  if(!match) return null;
+  const seconds=Number(match[1]);
+  if(!Number.isFinite(seconds) || seconds<0) return null;
+  return Date.now() + (seconds * 1000);
+}
+
+function buildHttpCacheMetadata(headers){
+  const etag=headers?.get('ETag')||'';
+  const lastModified=headers?.get('Last-Modified')||'';
+  const expiresHeader=headers?.get('Expires')||'';
+  const cacheControl=headers?.get('Cache-Control')||'';
+  let expiresAt=parseHttpDate(expiresHeader);
+  if(expiresAt==null){
+    expiresAt=parseMaxAgeFromCacheControl(cacheControl);
+  }
+  return {
+    etag:typeof etag==='string'&&etag?etag:null,
+    lastModified:typeof lastModified==='string'&&lastModified?lastModified:null,
+    expiresAt:Number.isFinite(expiresAt)?expiresAt:null
+  };
+}
+
+function buildHttpCacheKey(url){
+  return `${HTTP_CACHE_PREFIX}${url}`;
+}
+
+function isHttpCacheEligible(url){
+  return !/\/markets\/\d+\/orders\//.test(String(url||''));
+}
+
+function getHttpCacheEntry(url){
+  return getCache(buildHttpCacheKey(url));
+}
+
+function setHttpCacheEntry(url,payload,meta){
+  if(payload==null) return;
+  setCache(buildHttpCacheKey(url),{payload,meta:meta||null});
+}
+
+function appendConditionalHeaders(headers,cacheEntry){
+  if(!headers || !cacheEntry || !cacheEntry.meta) return;
+  const {etag,lastModified}=cacheEntry.meta;
+  if(etag && !headers.has('If-None-Match')) headers.set('If-None-Match',etag);
+  if(lastModified && !headers.has('If-Modified-Since')) headers.set('If-Modified-Since',lastModified);
+}
+
+function canUseHttpCacheEntry(cacheEntry){
+  if(!cacheEntry || !cacheEntry.payload || !cacheEntry.meta) return false;
+  const expiresAt=cacheEntry.meta.expiresAt;
+  return Number.isFinite(expiresAt) && Date.now()<expiresAt;
+}
+
+function createHeadersFromInput(rawHeaders){
+  const headers=new Headers();
+  if(rawHeaders instanceof Headers){
+    rawHeaders.forEach((value,key)=>headers.set(key,value));
+    return headers;
+  }
+  if(Array.isArray(rawHeaders)){
+    rawHeaders.forEach(([key,value])=>headers.set(key,value));
+    return headers;
+  }
+  if(rawHeaders && typeof rawHeaders==='object'){
+    Object.entries(rawHeaders).forEach(([key,value])=>headers.set(key,value));
+  }
+  return headers;
+}
 
 function appendQueryParam(rawUrl,key,value){
   if(!rawUrl || value==null || value==='') return rawUrl;
@@ -757,10 +835,26 @@ async function fetchWithRetry(url, opts = {}, maxRetries = 3) {
 }
 
 async function get(url, opts = {}, retries = 3) {
-  const res = await fetchWithRetry(url, { headers: { "Accept-Language": "en", "User-Agent": USER_AGENT }, ...opts }, retries);
+  const useHttpCache=isHttpCacheEligible(url);
+  const cacheEntry=useHttpCache?getHttpCacheEntry(url):null;
+  if(useHttpCache && canUseHttpCacheEntry(cacheEntry)){
+    return cacheEntry.payload;
+  }
+  const headers=createHeadersFromInput(opts.headers);
+  if(!headers.has('Accept-Language')) headers.set('Accept-Language','en');
+  if(useHttpCache) appendConditionalHeaders(headers,cacheEntry);
+  const requestOpts={...opts,headers};
+  const res = await fetchWithRetry(url, requestOpts, retries);
+  if(useHttpCache && res.status===304 && cacheEntry?.payload){
+    const refreshedMeta={...(cacheEntry.meta||{}),...buildHttpCacheMetadata(res.headers)};
+    setHttpCacheEntry(url,cacheEntry.payload,refreshedMeta);
+    return cacheEntry.payload;
+  }
   if (!res.ok) throw new Error(`HTTP ${res.status} ${url}`);
-  const pages = Number(res.headers.get("X-Pages") || "0");
-  return { data: await res.json(), pages };
+  const pages = Number(res.headers.get('X-Pages') || '0');
+  const payload={ data: await res.json(), pages };
+  if(useHttpCache) setHttpCacheEntry(url,payload,buildHttpCacheMetadata(res.headers));
+  return payload;
 }
 
 async function post(url, body, retries = 3) {
@@ -1563,7 +1657,30 @@ function refreshSystemFilter(){
     const name=systemNameMap.get(sysId)||sysId;
     if(!systemOptions.has(sysId)) systemOptions.set(sysId,name);
   }
-  sysSel.innerHTML=`<option value="all">Todos</option>` + [...systemOptions.entries()].map(([id,name])=>`<option value="${id}">${escapeHtml(name)}</option>`).join("");
+  const sorted=[...systemOptions.entries()].sort((a,b)=>String(a[1]).localeCompare(String(b[1])));
+  setSelectOptions(sysSel,sorted,'Todos');
+}
+
+function setSelectOptions(selectEl,entries,allLabel,previous='all'){
+  if(!selectEl) return;
+  const fragment=document.createDocumentFragment();
+  const allOption=document.createElement('option');
+  allOption.value='all';
+  allOption.textContent=allLabel;
+  fragment.appendChild(allOption);
+  entries.forEach(([value,label])=>{
+    const option=document.createElement('option');
+    option.value=String(value);
+    option.textContent=String(label ?? value);
+    fragment.appendChild(option);
+  });
+  selectEl.replaceChildren(fragment);
+  if(previous==='all'){
+    selectEl.value='all';
+    return;
+  }
+  const hasPrevious=entries.some(([value])=>String(value)===String(previous));
+  selectEl.value=hasPrevious?String(previous):'all';
 }
 
 function refreshStationFilter(){
@@ -1581,8 +1698,7 @@ function refreshStationFilter(){
     }
   }
   const sorted=[...stationOptions.entries()].sort((a,b)=>String(a[1]).localeCompare(String(b[1])));
-  stSel.innerHTML=`<option value="all">Todas</option>` + sorted.map(([id,name])=>`<option value="${id}">${escapeHtml(name)}</option>`).join("");
-  if(previous!=='all' && stationOptions.has(previous)) stSel.value=previous; else stSel.value='all';
+  setSelectOptions(stSel,sorted,'Todas',previous);
 }
 
 function refreshConstellationFilter(){
@@ -1597,8 +1713,7 @@ function refreshConstellationFilter(){
     if(!options.has(key)) options.set(key,row.constellation_name||String(row.constellation_id));
   }
   const sorted=[...options.entries()].sort((a,b)=>String(a[1]).localeCompare(String(b[1])));
-  consSel.innerHTML=`<option value="all">Todas</option>` + sorted.map(([value,label])=>`<option value="${value}">${escapeHtml(label)}</option>`).join("");
-  if(previous!=='all' && options.has(previous)) consSel.value=previous; else consSel.value='all';
+  setSelectOptions(consSel,sorted,'Todas',previous);
 }
 
 function refreshRegionFilter(){
@@ -1613,8 +1728,7 @@ function refreshRegionFilter(){
     if(!options.has(key)) options.set(key,row.region_name||String(row.region_id));
   }
   const sorted=[...options.entries()].sort((a,b)=>String(a[1]).localeCompare(String(b[1])));
-  regionSel.innerHTML=`<option value="all">Todas</option>` + sorted.map(([value,label])=>`<option value="${value}">${escapeHtml(label)}</option>`).join("");
-  if(previous!=='all' && options.has(previous)) regionSel.value=previous; else regionSel.value='all';
+  setSelectOptions(regionSel,sorted,'Todas',previous);
 }
 
 function removeTopPriceSummaryTables(){
@@ -2157,7 +2271,26 @@ function renderSystemsTable(){
     wrap.style.display='none';
   }
 }
-function renderStargatesTable(){ const wrap=j('#stargatesTableWrap'); const body=j('#stargatesTable tbody'); if(!wrap||!body) return; if(stargates.length){ body.innerHTML=stargates.map(g=>`<tr><td>${g.sourceSystem}</td><td>${g.gateName}</td><td>${g.id||''}</td><td>${g.destSystem}</td><td>${g.destConstellation}</td><td>${g.destRegion}</td></tr>`).join(''); wrap.style.display='block'; }else{ wrap.style.display='none'; }}
+function renderStargatesTable(){
+  const wrap=j('#stargatesTableWrap');
+  const body=j('#stargatesTable tbody');
+  if(!wrap||!body) return;
+  if(!stargates.length){
+    body.innerHTML='';
+    wrap.style.display='none';
+    return;
+  }
+  body.innerHTML=stargates.map(g=>{
+    const sourceSystem=escapeHtml(g?.sourceSystem||'');
+    const gateName=escapeHtml(g?.gateName||'');
+    const gateId=escapeHtml(g?.id||'');
+    const destSystem=escapeHtml(g?.destSystem||'');
+    const destConstellation=escapeHtml(g?.destConstellation||'');
+    const destRegion=escapeHtml(g?.destRegion||'');
+    return `<tr><td>${sourceSystem}</td><td>${gateName}</td><td>${gateId}</td><td>${destSystem}</td><td>${destConstellation}</td><td>${destRegion}</td></tr>`;
+  }).join('');
+  wrap.style.display='block';
+}
 function computeDestinationCounts(){
   const nameToId=new Map(systems.map(s=>[s.name,s.id]));
   const counts=new Map();

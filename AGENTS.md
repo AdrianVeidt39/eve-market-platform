@@ -138,12 +138,15 @@ reformatting unrelated blocks.
 - Reuse existing helpers: `fetchWithRetry`, `get`, `post`.
 - Respect ESI rate limits; do not bypass the queue/throttle pattern.
 - Keep retry/backoff behavior consistent with existing logic.
-- Preserve `Accept-Language` and `User-Agent` handling rules.
+- Preserve `Accept-Language` and user-agent/compatibility header rules.
+- Keep conditional caching behavior (`ETag` / `If-None-Match`) intact.
 
 ### Caching
 - Cache is implemented via `localStorage` with TTL.
 - Keep cache keys stable (`esi.*`) and preserve payload shapes.
 - When changing cached structures, ensure backward compatibility or bump keys.
+- Respect HTTP cache headers (`Expires`, `Cache-Control`, `Last-Modified`) when
+  extending ESI fetch logic.
 
 ### DOM / UI Practices
 - Prefer the existing `j(selector)` helper for single-node queries.
