@@ -5,10 +5,9 @@ making changes.
 
 ## Repo Overview
 - Type: static frontend (no build step detected).
-- Primary file: `index.html` (HTML + CSS + large inline JS).
+- Primary file: `client/index.html` (HTML + CSS + large inline JS).
 - External dependency: Chart.js via CDN (`chart.umd.min.js`).
-- Local script reference: `logging.js` is referenced from `index.html` but is
-  not present in the current repository tree.
+- Local logging helper: `client/logging.js`.
 
 ## Commands
 No package manager or task runner config was found (no `package.json`,
@@ -24,10 +23,31 @@ python -m http.server 8000
 
 Open: `http://localhost:8000`
 
+Open app path: `http://localhost:8000/client/`
+
 Alternatives:
 
 ```bash
 npx serve .
+```
+
+### Sync Local Workspace to Repo
+When your local working copy lives in the parent folder (`../`), use:
+
+```bash
+bash sync-local.sh
+```
+
+Sync and include local `AGENTS.md` as well:
+
+```bash
+bash sync-local.sh --with-agents
+```
+
+One-command sync + commit + push:
+
+```bash
+bash sync-local.sh --with-agents --commit "Sync local workspace files" --push
 ```
 
 ### Build

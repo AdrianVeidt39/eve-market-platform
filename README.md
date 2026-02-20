@@ -10,6 +10,20 @@ Open `client/index.html` in a modern browser. The page loads region data from th
 
 The client caches API responses and throttles requests (~300 ms between calls) to respect ESI rate limits. Responses that fail with 420/429/503 are retried with exponential backoff.
 
+## Sync Local Workspace
+
+If your editable workspace is in the parent folder (`../`) and this repository is the publish target, use:
+
+```bash
+bash sync-local.sh
+```
+
+Include local `AGENTS.md`, then commit and push in one command:
+
+```bash
+bash sync-local.sh --with-agents --commit "Sync local workspace files" --push
+```
+
 ## Logging and Auditing
 
 All API interactions and warnings are recorded through helper functions (`logInfo`, `logWarn`, `logError`). Each entry is stored in `localStorage` under the `esiLogs` key and, when possible, sent to a backend endpoint using `navigator.sendBeacon`.
