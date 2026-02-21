@@ -1,0 +1,11 @@
+{
+  "name": "@eve/web",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "serve ../../client -l 4173"
+  },
+  "devDependencies": {
+    "serve": "^14.2.4"
+  }
+}

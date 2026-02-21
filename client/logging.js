@@ -18,7 +18,7 @@
       }catch(_){/* ignore */}
     }
     if(typeof navigator !== 'undefined' && navigator.sendBeacon){
-      try{ navigator.sendBeacon('/logs', JSON.stringify(entry)); }catch(_){/* ignore */}
+      try{ navigator.sendBeacon('/v1/logs/esi', JSON.stringify(entry)); }catch(_){/* ignore */}
     }
   }
 

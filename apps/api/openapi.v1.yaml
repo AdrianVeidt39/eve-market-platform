@@ -1,0 +1,104 @@
+openapi: 3.1.0
+info:
+  title: EVE Market Platform API
+  version: 1.0.0
+servers:
+  - url: http://localhost:3001
+paths:
+  /v1/regions:
+    get:
+      summary: Lista regiones EVE
+      responses:
+        '200':
+          description: OK
+  /v1/regions/{regionId}/constellations:
+    get:
+      summary: Lista constelaciones por region
+      parameters:
+        - in: path
+          name: regionId
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+  /v1/constellations/{constellationId}/stations:
+    get:
+      summary: Lista estaciones NPC por constelacion
+      parameters:
+        - in: path
+          name: constellationId
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+  /v1/market/snapshots:
+    post:
+      summary: Crea snapshot de mercado filtrado por estaciones NPC de constelacion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [regionId, constellationId]
+              properties:
+                regionId:
+                  type: integer
+                constellationId:
+                  type: integer
+      responses:
+        '200':
+          description: Snapshot creado
+  /v1/market/snapshots/{snapshotId}:
+    get:
+      summary: Obtiene snapshot persistido
+      parameters:
+        - in: path
+          name: snapshotId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+        '404':
+          description: No encontrado
+  /v1/cache/refresh:
+    post:
+      summary: Limpia cache backend de ESI
+      responses:
+        '200':
+          description: OK
+  /v1/logs/esi:
+    post:
+      summary: Ingesta logs estructurados de frontend/backend
+      responses:
+        '202':
+          description: Accepted
+  /v1/esi/{path}:
+    get:
+      summary: Proxy ESI (compatibilidad incremental)
+      parameters:
+        - in: path
+          name: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: Proxy ESI POST (compatibilidad incremental)
+      parameters:
+        - in: path
+          name: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK

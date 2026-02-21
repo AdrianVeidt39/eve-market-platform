@@ -3,3 +3,12 @@ __pycache__/
 esi_cache.sqlite
 chartjs-chart-box-and-violin-plot/build/
 chartjs-chart-box-and-violin-plot/node_modules/
+launch-eve-market.cmd
+node_modules/
+dist/
+coverage/
+.turbo/
+.env
+.env.*
+!*.env.example
+apps/api/.data/

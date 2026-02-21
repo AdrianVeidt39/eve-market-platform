@@ -1,14 +1,43 @@
 # EVE Market Explorer
 
-Static client to browse the EVE Online market by region, constellation and system.
+Refactor incremental hacia arquitectura profesional **Frontend + Backend + DB**.
 
-## Usage
+## Monorepo
 
-Open `client/index.html` in a modern browser. The page loads region data from the public ESI API and guides you through selecting a constellation. Press **Consultar mercado** to list buy and sell orders for every public station in the chosen constellation. Stations with no orders are highlighted.
+- `apps/web`: runtime del frontend estatico (fuente actual todavia en `client/`).
+- `apps/api`: backend Fastify con API `/v1`, proxy ESI y snapshot de mercado.
+- `packages/domain`: logica de dominio pura.
+- `packages/esi-client`: cliente ESI reusable (cache TTL, throttle, retry+jitter, dedupe).
 
-## Development Notes
+## Inicio rapido
 
-The client caches API responses and throttles requests (~300 ms between calls) to respect ESI rate limits. Responses that fail with 420/429/503 are retried with exponential backoff.
+```bash
+npm install
+npm run dev:api
+```
+
+Abrir: `http://localhost:3001/`.
+
+## Base de datos (PostgreSQL recomendado)
+
+Configura `DATABASE_URL` y ejecuta migraciones:
+
+```bash
+npm run migrate -w apps/api
+```
+
+Si no hay `DATABASE_URL`, la API usa repositorio en memoria para desarrollo rapido.
+
+## API versionada
+
+- Contrato: `apps/api/openapi.v1.yaml`
+- Arquitectura/decisiones: `docs/architecture.md`, `docs/adr-0001-stack-y-fronteras.md`
+
+## Calidad y CI
+
+```bash
+npm run ci
+```
 
 ## Sync Local Workspace
 
@@ -47,9 +76,9 @@ ESI request logging is enabled by default. It can be toggled by setting an envir
 
 ```js
 // disable
-localStorage.setItem('LOG_ESI','false');
+localStorage.setItem('LOG_ESI', 'false');
 // enable
-localStorage.setItem('LOG_ESI','true');
+localStorage.setItem('LOG_ESI', 'true');
 ```
 
 To retrieve the stored logs for audits, open the browser console and run:

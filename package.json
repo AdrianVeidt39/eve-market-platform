@@ -1,0 +1,33 @@
+{
+  "name": "eve-market-platform",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w apps/api",
+    "dev:api": "npm run dev -w apps/api",
+    "dev:web": "npm run dev -w apps/web",
+    "lint": "eslint \"apps/**/*.ts\" \"packages/**/*.ts\"",
+    "format": "prettier --write \"*.{json,md}\" \"*.{ts,cjs}\" \"apps/**/*.{ts,md,yaml,yml,json}\" \"packages/**/*.{ts,json}\" \"docs/**/*.md\" \".github/workflows/*.yml\"",
+    "format:check": "prettier --check \"*.{json,md}\" \"*.{ts,cjs}\" \"apps/**/*.{ts,md,yaml,yml,json}\" \"packages/**/*.{ts,json}\" \"docs/**/*.md\" \".github/workflows/*.yml\"",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "ci": "npm run lint && npm run format:check && npm run typecheck && npm run test"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "@types/pg": "^8.15.5",
+    "@typescript-eslint/eslint-plugin": "^8.41.0",
+    "@typescript-eslint/parser": "^8.41.0",
+    "eslint": "^9.35.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.6.2",
+    "tslib": "^2.8.1",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  }
+}
