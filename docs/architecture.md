@@ -16,7 +16,7 @@
 
 ## Persistencia
 
-PostgreSQL (recomendado) con tablas:
+MySQL (recomendado) con tablas:
 
 - `snapshots`
 - `snapshot_orders`
@@ -31,6 +31,11 @@ PostgreSQL (recomendado) con tablas:
 
 ## Migracion incremental
 
-- Fase 1: backend + proxy `/v1/esi/*`, frontend existente deja de llamar ESI directo.
-- Fase 2: mover UI desde `client/` a `apps/web` por modulos.
-- Fase 3: reemplazar llamadas proxy por endpoints de dominio (`/v1/market/*`).
+- Fase 1 (completada): backend + proxy `/v1/esi/*`, frontend existente deja de llamar ESI directo.
+- Fase 2 (en progreso): mover UI desde `client/` a `apps/web` por modulos.
+- Fase 3 (parcial): flujo principal (`region -> constellation -> snapshot`) usa endpoints de dominio `/v1/*`; el proxy `/v1/esi/*` queda para compatibilidad de funcionalidades secundarias.
+
+## Rendimiento SQL
+
+- Indices agregados en `002_indexes.sql` para snapshots, orders y logs.
+- Consultas de analisis en `docs/sql-analysis-queries.md`.

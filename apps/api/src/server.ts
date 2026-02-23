@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 
 import { EsiClient, MemoryCacheStore } from '@eve/esi-client';
 import cors from '@fastify/cors';
@@ -10,8 +11,8 @@ import { z } from 'zod';
 
 import { loadConfig } from './config.js';
 import { MarketService } from './market.service.js';
+import { MysqlRepository } from './repository.mysql.js';
 import { MemoryRepository } from './repository.memory.js';
-import { PgRepository } from './repository.pg.js';
 import type { MarketRepository } from './types.js';
 
 const snapshotBodySchema = z.object({
@@ -29,7 +30,7 @@ export function buildServer(options?: { repository?: MarketRepository; esiClient
   const config = loadConfig();
   const repository =
     options?.repository ??
-    (config.databaseUrl ? new PgRepository(config.databaseUrl) : new MemoryRepository());
+    (config.databaseUrl ? new MysqlRepository(config.databaseUrl) : new MemoryRepository());
 
   const app = Fastify({ logger: true });
   const esiClient =
@@ -71,6 +72,35 @@ export function buildServer(options?: { repository?: MarketRepository; esiClient
   app.register(cors, { origin: true });
 
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+  const openapiPath = path.join(root, 'apps/api/openapi.v1.yaml');
+
+  app.get('/v1/openapi.yaml', async (_request, reply) => {
+    const spec = await readFile(openapiPath, 'utf8');
+    reply.type('application/yaml').send(spec);
+  });
+
+  app.get('/docs', async (_request, reply) => {
+    reply.type('text/html').send(`<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EVE API Docs</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script>
+    window.ui = SwaggerUIBundle({
+      url: '/v1/openapi.yaml',
+      dom_id: '#swagger-ui'
+    });
+  </script>
+</body>
+</html>`);
+  });
+
   app.register(fastifyStatic, {
     root: path.join(root, 'client'),
     prefix: '/'
@@ -107,18 +137,35 @@ export function buildServer(options?: { repository?: MarketRepository; esiClient
     if (!parsed.success) {
       return reply.code(400).send({ error: 'invalid_payload', details: parsed.error.flatten() });
     }
-    const correlationId = request.headers['x-correlation-id'] as string;
-    const result = await marketService.buildSnapshot({
-      regionId: parsed.data.regionId,
-      constellationId: parsed.data.constellationId,
-      correlationId
-    });
-    return {
-      data: {
-        snapshot: result.snapshot,
-        ordersCount: result.orders.length
-      }
-    };
+    try {
+      const correlationId = request.headers['x-correlation-id'] as string;
+      const startedAt = Date.now();
+      const result = await marketService.buildSnapshot({
+        regionId: parsed.data.regionId,
+        constellationId: parsed.data.constellationId,
+        correlationId
+      });
+      request.log.info(
+        {
+          correlationId,
+          regionId: parsed.data.regionId,
+          constellationId: parsed.data.constellationId,
+          ordersCount: result.orders.length,
+          latencyMs: Date.now() - startedAt
+        },
+        'snapshot persisted'
+      );
+      return {
+        data: {
+          snapshot: result.snapshot,
+          ordersCount: result.orders.length
+        }
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      request.log.error({ err: error }, 'snapshot persistence failed');
+      return reply.code(500).send({ error: 'snapshot_persist_failed', message });
+    }
   });
 
   app.get('/v1/market/snapshots/:snapshotId', async (request, reply) => {

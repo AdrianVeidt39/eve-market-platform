@@ -270,7 +270,7 @@
                 <th class="sortable" data-k="constellation_name">Constelación</th>
                 <th class="sortable" data-k="region_name">Región</th>
                 <th class="sortable" data-k="station_name">Estación</th>
-                <th class="sortable" data-k="issued">Emitida</th>
+                <th class="sortable" data-k="issued">Emitida (UTC)</th>
                 <th class="sortable" data-k="duration">Duración</th>
               </tr>
               <tr class="filters">
@@ -945,6 +945,8 @@ let ensureDestinationOrdersPromise=null;
 let destinationCountsReady=false;
 let baseFetchState={totalPages:0,fetchedPages:0};
 const destinationRegionFetchState=new Map();
+let lastMarketSnapshotId=null;
+window.lastMarketSnapshotId=null;
 
 function updateRegionNameCache(list){
   if(!Array.isArray(list)) return;
@@ -1798,9 +1800,12 @@ async function loadRegions(){
     sel.innerHTML = `<option value="" disabled selected>Selecciona región…</option>` + regions.map(r=>`<option value="${r.id}">${r.name}</option>`).join("");
     return;
   }
-  const {data:ids}=await throttleEsiCall(()=>get(`${ESI}/universe/regions/`));
-  const names=await throttleEsiCall(()=>post(`${ESI}/universe/names/`,ids));
-  regions=names.filter(x=>x.category==="region").map(x=>({id:x.id,name:x.name})).sort((a,b)=>a.name.localeCompare(b.name));
+  const {data:payload}=await get('/v1/regions');
+  const rows=Array.isArray(payload?.data)?payload.data:[];
+  regions=rows
+    .map(x=>({id:Number(x.id),name:String(x.name||x.id)}))
+    .filter(x=>Number.isFinite(x.id))
+    .sort((a,b)=>a.name.localeCompare(b.name));
   updateRegionNameCache(regions);
   setCache('esi.regions',regions);
   sel.innerHTML = `<option value="" disabled selected>Selecciona región…</option>` + regions.map(r=>`<option value="${r.id}">${r.name}</option>`).join("");
@@ -1827,9 +1832,12 @@ async function onRegionChange(){
     sel.disabled=false;
     return;
   }
-  const {data:regionDetail}=await throttleEsiCall(()=>get(`${ESI}/universe/regions/${regionId}/`));
-  const names=await throttleEsiCall(()=>post(`${ESI}/universe/names/`,regionDetail.constellations));
-  constellations=names.filter(x=>x.category==="constellation").map(x=>({id:x.id,name:x.name})).sort((a,b)=>a.name.localeCompare(b.name));
+  const {data:payload}=await get(`/v1/regions/${regionId}/constellations`);
+  const rows=Array.isArray(payload?.data)?payload.data:[];
+  constellations=rows
+    .map(x=>({id:Number(x.id),name:String(x.name||x.id)}))
+    .filter(x=>Number.isFinite(x.id))
+    .sort((a,b)=>a.name.localeCompare(b.name));
   updateConstellationNameCache(constellations);
   sel.innerHTML = `<option value="" disabled selected>Selecciona constelación…</option>` + constellations.map(c=>`<option value="${c.id}">${c.name}</option>`).join("");
   sel.disabled=false;
@@ -1873,6 +1881,11 @@ async function onConstellationChange(){
     return;
   }
   let data=null;
+  let apiStationData=null;
+  try{
+    const {data:payload}=await get(`/v1/constellations/${consId}/stations`);
+    apiStationData=payload?.data||null;
+  }catch(e){ logWarn('[API] No se pudieron cargar estaciones por endpoint de dominio',e); }
   try{
     data=await loadConstellationSystemsData(consId);
   }catch(e){ logError(e); }
@@ -1882,8 +1895,24 @@ async function onConstellationChange(){
   baseSystems=Array.isArray(data.systems)?data.systems:[];
   baseStargates=Array.isArray(data.stargates)?data.stargates:[];
   const stationEntries=data.stationMap instanceof Map? [...data.stationMap.entries()]: (Array.isArray(data.stationMap)?data.stationMap:[]);
-  stationToSystem=new Map(stationEntries);
-  stationsInConstellation=new Set(stationEntries.map(entry=>entry[0]));
+  const mergedStationMap=new Map(stationEntries);
+  if(Array.isArray(apiStationData?.stationToSystem)){
+    for(const pair of apiStationData.stationToSystem){
+      const stationId=Number(pair?.stationId);
+      const systemId=Number(pair?.systemId);
+      if(Number.isFinite(stationId) && Number.isFinite(systemId)){
+        mergedStationMap.set(stationId,systemId);
+      }
+    }
+  }
+  if(Array.isArray(apiStationData?.stations)){
+    for(const stationId of apiStationData.stations){
+      const numericId=Number(stationId);
+      if(Number.isFinite(numericId) && !mergedStationMap.has(numericId)) mergedStationMap.set(numericId,null);
+    }
+  }
+  stationToSystem=mergedStationMap;
+  stationsInConstellation=new Set([...mergedStationMap.keys()]);
   systemNameMap=new Map();
   baseSystems.forEach(s=>{
     if(Number.isFinite(s?.id) && typeof s?.name==='string'){
@@ -1957,20 +1986,21 @@ async function queryMarket(){
   const prevDisplay=busy?busy.style.display:null;
   if(busy) busy.style.display='flex';
   try{
-    const orderType='all';
-    const first=await throttleEsiCall(()=>get(`${ESI}/markets/${regionId}/orders/?order_type=${orderType}&page=1`));
-    const totalPages=first.pages||1;
-    baseFetchState.totalPages=totalPages;
-    baseFetchState.fetchedPages=Math.min(1,totalPages);
-    updatePagesSummaryDisplay();
-    filterAndPush(first.data);
-    for(let p=2;p<=totalPages;p++){
-      const {data}=await throttleEsiCall(()=>get(`${ESI}/markets/${regionId}/orders/?order_type=${orderType}&page=${p}`));
-      baseFetchState.fetchedPages=Math.min(p,totalPages);
-      updatePagesSummaryDisplay();
-      filterAndPush(data);
-    }
-    baseFetchState.fetchedPages=baseFetchState.totalPages||baseFetchState.fetchedPages;
+    const snapshotResult=await persistMarketSnapshot(regionId,currentConstellationId);
+    const snapshotId=snapshotResult?.data?.snapshot?.id;
+    if(!snapshotId) throw new Error('No se recibio snapshotId desde /v1/market/snapshots');
+    const {data:snapshotPayload}=await get(`/v1/market/snapshots/${snapshotId}`);
+    const snapshotOrders=Array.isArray(snapshotPayload?.data?.orders)?snapshotPayload.data.orders:[];
+    baseOrdersRaw=snapshotOrders.map(o=>({
+      ...o,
+      __constellationId:currentConstellationId,
+      __constellationName:currentConstellationName,
+      __regionId:currentRegionId,
+      __regionName:currentRegionName
+    }));
+    syncOrdersRaw();
+    baseFetchState.totalPages=1;
+    baseFetchState.fetchedPages=1;
     updatePagesSummaryDisplay();
     await ensureSelectedDestinationOrders();
     const ids=new Set(); for(const o of ordersRaw){ ids.add(o.type_id); ids.add(o.location_id);} if(ids.size){ const arr=[...ids]; const chunk=900; for(let i=0;i<arr.length;i+=chunk){ const names=await throttleEsiCall(()=>post(`${ESI}/universe/names/`,arr.slice(i,i+chunk))); for(const n of names){ nameCache.set(n.id,n.name);} }}
@@ -1987,6 +2017,45 @@ async function queryMarket(){
     if(busy) busy.style.display=prevDisplay!=null?prevDisplay:'none';
   }
 }
+
+async function persistMarketSnapshot(regionId,constellationId){
+  if(!Number.isFinite(regionId) || !Number.isFinite(constellationId)) return;
+  try{
+    const response=await fetch('/v1/market/snapshots',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({regionId,constellationId})
+    });
+    if(!response.ok){
+      let detail='';
+      try{
+        const raw=await response.text();
+        if(raw){
+          try{
+            const parsed=JSON.parse(raw);
+            detail=parsed?.message||parsed?.error||raw;
+          }catch{
+            detail=raw;
+          }
+        }
+      }catch{}
+      throw new Error(`HTTP ${response.status} /v1/market/snapshots ${detail}`.trim());
+    }
+    const payload=await response.json();
+    const snapshotId=payload?.data?.snapshot?.id;
+    if(snapshotId){
+      lastMarketSnapshotId=snapshotId;
+      window.lastMarketSnapshotId=snapshotId;
+    }
+    logInfo('[API] Snapshot de mercado guardado',snapshotId||'sin-id');
+    return payload;
+  }catch(error){
+    const msg=error&&error.message?error.message:String(error);
+    logWarn('[API] No se pudo guardar snapshot de mercado',msg);
+    throw error;
+  }
+}
+
 function filterAndPush(arr){
   let pushed=false;
   for(const o of arr){
@@ -2089,7 +2158,7 @@ function render(){
   const disable=rows.length===0;
   j('#exportBtn').disabled=disable;
   j('#chartsBtn').disabled=disable;
-  tbody.innerHTML=rows.map(r=>`<tr><td>${escapeHtml(r.type_name)}</td><td>${r.order_type==='sell'?'Venta':'Compra'}</td><td>${fmtPrice(r.price)}</td><td>${fmtInt(r.volume_remain)}</td><td>${fmtInt(r.min_volume)}</td><td>${r.range}</td><td>${escapeHtml(r.system_name)}</td><td>${escapeHtml(r.constellation_name)}</td><td>${escapeHtml(r.region_name)}</td><td>${escapeHtml(r.station_name)}</td><td><span class="muted" title="${r.issued}">${new Date(r.issued).toLocaleString("es-MX")}</span></td><td>${r.duration}</td></tr>`).join('');
+  tbody.innerHTML=rows.map(r=>`<tr><td>${escapeHtml(r.type_name)}</td><td>${r.order_type==='sell'?'Venta':'Compra'}</td><td>${fmtPrice(r.price)}</td><td>${fmtInt(r.volume_remain)}</td><td>${fmtInt(r.min_volume)}</td><td>${r.range}</td><td>${escapeHtml(r.system_name)}</td><td>${escapeHtml(r.constellation_name)}</td><td>${escapeHtml(r.region_name)}</td><td>${escapeHtml(r.station_name)}</td><td><span class="muted" title="${r.issued}">${escapeHtml(r.issued)}</span></td><td>${r.duration}</td></tr>`).join('');
   updateConnectedButtonState();
   updateStargateBubble(rows);
   renderSystemsTable();

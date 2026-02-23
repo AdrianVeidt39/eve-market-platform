@@ -2,9 +2,10 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import pg from 'pg';
+import mysql from 'mysql2/promise';
+import type { RowDataPacket } from 'mysql2';
 
-const { Pool } = pg;
+type MigrationRow = RowDataPacket & { version: string };
 
 async function main(): Promise<void> {
   const databaseUrl = process.env.DATABASE_URL;
@@ -12,37 +13,38 @@ async function main(): Promise<void> {
     throw new Error('DATABASE_URL is required to run migrations');
   }
 
-  const pool = new Pool({ connectionString: databaseUrl });
-  const client = await pool.connect();
+  const connection = await mysql.createConnection({
+    uri: databaseUrl,
+    multipleStatements: true
+  });
   const currentDir = path.dirname(fileURLToPath(import.meta.url));
   const migrationsDir = path.join(currentDir, 'migrations');
 
   try {
-    await client.query('BEGIN');
-    await client.query(
-      'CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW())'
+    await connection.beginTransaction();
+    await connection.query(
+      'CREATE TABLE IF NOT EXISTS schema_migrations (version VARCHAR(255) PRIMARY KEY, applied_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)) ENGINE=InnoDB'
     );
 
-    const appliedRows = await client.query<{ version: string }>(
+    const [appliedRows] = await connection.query<MigrationRow[]>(
       'SELECT version FROM schema_migrations'
     );
-    const applied = new Set(appliedRows.rows.map((r) => r.version));
+    const applied = new Set(appliedRows.map((row) => row.version));
 
     const migrationFiles = (await readdir(migrationsDir)).filter((f) => f.endsWith('.sql')).sort();
     for (const file of migrationFiles) {
       if (applied.has(file)) continue;
       const sql = await readFile(path.join(migrationsDir, file), 'utf8');
-      await client.query(sql);
-      await client.query('INSERT INTO schema_migrations(version) VALUES ($1)', [file]);
+      await connection.query(sql);
+      await connection.execute('INSERT INTO schema_migrations(version) VALUES (?)', [file]);
     }
 
-    await client.query('COMMIT');
+    await connection.commit();
   } catch (error) {
-    await client.query('ROLLBACK');
+    await connection.rollback();
     throw error;
   } finally {
-    client.release();
-    await pool.end();
+    await connection.end();
   }
 }
 

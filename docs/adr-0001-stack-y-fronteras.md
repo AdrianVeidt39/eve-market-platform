@@ -12,7 +12,7 @@ La app actual es cliente estatico con logica y llamadas ESI en navegador. Esto d
 
 - Monorepo con workspaces: `apps/*` y `packages/*`.
 - Backend: Node.js + Fastify + TypeScript.
-- DB: PostgreSQL con migraciones SQL versionadas.
+- DB: MySQL con migraciones SQL versionadas.
 - Dominio en paquete puro (`@eve/domain`) sin dependencias de infraestructura.
 - Cliente ESI reusable (`@eve/esi-client`) con:
   - throttle global,

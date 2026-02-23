@@ -18,9 +18,14 @@ npm run dev:api
 
 Abrir: `http://localhost:3001/`.
 
-## Base de datos (PostgreSQL recomendado)
+### Launchers Windows
 
-Configura `DATABASE_URL` y ejecuta migraciones:
+- `launch-eve-market.cmd`: inicia API + UI con fallback a memoria si MySQL falla.
+- `launch-eve-market-strict-db.cmd`: inicia API + UI en modo estricto (sin fallback si MySQL falla).
+
+## Base de datos (MySQL recomendado)
+
+Configura `DATABASE_URL` (por ejemplo `mysql://root:password@localhost:3306/eve_market`) y ejecuta migraciones:
 
 ```bash
 npm run migrate -w apps/api
@@ -32,6 +37,8 @@ Si no hay `DATABASE_URL`, la API usa repositorio en memoria para desarrollo rapi
 
 - Contrato: `apps/api/openapi.v1.yaml`
 - Arquitectura/decisiones: `docs/architecture.md`, `docs/adr-0001-stack-y-fronteras.md`
+- Consultas SQL de analisis: `docs/sql-analysis-queries.md`
+- Swagger UI local: `http://localhost:3001/docs`
 
 ## Calidad y CI
 
