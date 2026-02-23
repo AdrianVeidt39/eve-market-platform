@@ -107,7 +107,6 @@
           <div class="spinner"></div><span>Consultando órdenes del mercado regional…</span>
         </div>
       </div>
-      <p id="snapshotQuickLink" class="note" style="display:none"></p>
     </div>
 
     <div id="analytics" class="card" style="margin-top:16px;display:none">
@@ -948,19 +947,6 @@ let baseFetchState={totalPages:0,fetchedPages:0};
 const destinationRegionFetchState=new Map();
 let lastMarketSnapshotId=null;
 window.lastMarketSnapshotId=null;
-
-function updateSnapshotQuickLink(){
-  const el=j('#snapshotQuickLink');
-  if(!el) return;
-  if(!lastMarketSnapshotId){
-    el.style.display='none';
-    el.innerHTML='';
-    return;
-  }
-  const snapshotId=encodeURIComponent(lastMarketSnapshotId);
-  el.style.display='block';
-  el.innerHTML=`Ultimo snapshot guardado: <code>${lastMarketSnapshotId}</code> · <a href="/v1/market/snapshots?limit=20&offset=0" target="_blank" rel="noopener">Ver historial</a> · <a href="/v1/market/snapshots/${snapshotId}" target="_blank" rel="noopener">Ver detalle</a>`;
-}
 
 function updateRegionNameCache(list){
   if(!Array.isArray(list)) return;
@@ -1975,9 +1961,6 @@ function resetLower(){
 
 async function queryMarket(){
   const regionId=+j('#region').value;
-  lastMarketSnapshotId=null;
-  window.lastMarketSnapshotId=null;
-  updateSnapshotQuickLink();
   chartsReady=false;
   connectedOrdersRaw=[];
   baseOrdersRaw=[];
@@ -2063,7 +2046,6 @@ async function persistMarketSnapshot(regionId,constellationId){
     if(snapshotId){
       lastMarketSnapshotId=snapshotId;
       window.lastMarketSnapshotId=snapshotId;
-      updateSnapshotQuickLink();
     }
     logInfo('[API] Snapshot de mercado guardado',snapshotId||'sin-id');
     return payload;
