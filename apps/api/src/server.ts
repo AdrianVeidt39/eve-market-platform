@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 
 import { EsiClient, MemoryCacheStore } from '@eve/esi-client';
 import cors from '@fastify/cors';
+import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import Fastify from 'fastify';
 import { z } from 'zod';
@@ -26,13 +27,24 @@ const logBodySchema = z.object({
   context: z.record(z.string(), z.unknown()).optional()
 });
 
+const snapshotListQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  offset: z.coerce.number().int().min(0).default(0)
+});
+
 export function buildServer(options?: { repository?: MarketRepository; esiClient?: EsiClient }) {
   const config = loadConfig();
   const repository =
     options?.repository ??
     (config.databaseUrl ? new MysqlRepository(config.databaseUrl) : new MemoryRepository());
 
-  const app = Fastify({ logger: true });
+  const app = Fastify({ logger: true, bodyLimit: 1_048_576 });
+  const metrics = {
+    requestsTotal: 0,
+    requestsErrors: 0,
+    requestLatencyMsTotal: 0,
+    requestLatencyMsCount: 0
+  };
   const esiClient =
     options?.esiClient ??
     new EsiClient({
@@ -70,6 +82,38 @@ export function buildServer(options?: { repository?: MarketRepository; esiClient
   });
 
   app.register(cors, { origin: true });
+  app.register(rateLimit, {
+    max: 300,
+    timeWindow: '1 minute'
+  });
+
+  app.addHook('onResponse', async (request, reply) => {
+    const latencyHeader = reply.getHeader('response-time');
+    const latencyMs =
+      typeof latencyHeader === 'string'
+        ? Number(latencyHeader)
+        : typeof latencyHeader === 'number'
+          ? latencyHeader
+          : Number(reply.elapsedTime ?? 0);
+
+    metrics.requestsTotal += 1;
+    if (reply.statusCode >= 400) metrics.requestsErrors += 1;
+    if (Number.isFinite(latencyMs) && latencyMs >= 0) {
+      metrics.requestLatencyMsTotal += latencyMs;
+      metrics.requestLatencyMsCount += 1;
+    }
+
+    request.log.info(
+      {
+        correlationId: request.headers['x-correlation-id'] as string,
+        path: request.url,
+        method: request.method,
+        statusCode: reply.statusCode,
+        latencyMs
+      },
+      'http request completed'
+    );
+  });
 
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
   const openapiPath = path.join(root, 'apps/api/openapi.v1.yaml');
@@ -107,6 +151,36 @@ export function buildServer(options?: { repository?: MarketRepository; esiClient
   });
 
   app.get('/health', async () => ({ ok: true }));
+
+  app.get('/ready', async (request, reply) => {
+    try {
+      const result = await repository.healthCheck();
+      return { ok: result.ok, mode: result.mode };
+    } catch (error) {
+      request.log.error({ err: error }, 'readiness check failed');
+      return reply.code(503).send({ ok: false });
+    }
+  });
+
+  app.get('/metrics', async (_request, reply) => {
+    const avgLatency =
+      metrics.requestLatencyMsCount > 0
+        ? metrics.requestLatencyMsTotal / metrics.requestLatencyMsCount
+        : 0;
+    const lines = [
+      '# HELP eve_api_requests_total Total HTTP requests processed',
+      '# TYPE eve_api_requests_total counter',
+      `eve_api_requests_total ${metrics.requestsTotal}`,
+      '# HELP eve_api_requests_errors_total Total HTTP requests with status >= 400',
+      '# TYPE eve_api_requests_errors_total counter',
+      `eve_api_requests_errors_total ${metrics.requestsErrors}`,
+      '# HELP eve_api_request_latency_ms_avg Average request latency in milliseconds',
+      '# TYPE eve_api_request_latency_ms_avg gauge',
+      `eve_api_request_latency_ms_avg ${avgLatency.toFixed(2)}`
+    ];
+
+    reply.type('text/plain; version=0.0.4').send(lines.join('\n'));
+  });
 
   app.get('/v1/regions', async (request) => {
     const correlationId = request.headers['x-correlation-id'] as string;
@@ -166,6 +240,22 @@ export function buildServer(options?: { repository?: MarketRepository; esiClient
       request.log.error({ err: error }, 'snapshot persistence failed');
       return reply.code(500).send({ error: 'snapshot_persist_failed', message });
     }
+  });
+
+  app.get('/v1/market/snapshots', async (request, reply) => {
+    const parsed = snapshotListQuerySchema.safeParse(request.query ?? {});
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'invalid_query', details: parsed.error.flatten() });
+    }
+
+    const items = await repository.listSnapshots(parsed.data.limit, parsed.data.offset);
+    return {
+      data: {
+        items,
+        limit: parsed.data.limit,
+        offset: parsed.data.offset
+      }
+    };
   });
 
   app.get('/v1/market/snapshots/:snapshotId', async (request, reply) => {

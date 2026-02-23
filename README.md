@@ -18,6 +18,14 @@ npm run dev:api
 
 Abrir: `http://localhost:3001/`.
 
+## Docker Compose
+
+```bash
+docker compose up --build
+```
+
+Esto levanta MySQL + API. La API ejecuta migraciones al iniciar.
+
 ### Launchers Windows
 
 - `launch-eve-market.cmd`: inicia API + UI con fallback a memoria si MySQL falla.
@@ -38,7 +46,14 @@ Si no hay `DATABASE_URL`, la API usa repositorio en memoria para desarrollo rapi
 - Contrato: `apps/api/openapi.v1.yaml`
 - Arquitectura/decisiones: `docs/architecture.md`, `docs/adr-0001-stack-y-fronteras.md`
 - Consultas SQL de analisis: `docs/sql-analysis-queries.md`
+- Runbook operativo: `docs/runbook.md`
 - Swagger UI local: `http://localhost:3001/docs`
+
+Endpoints operativos:
+
+- `GET /health`
+- `GET /ready`
+- `GET /metrics`
 
 ## Calidad y CI
 

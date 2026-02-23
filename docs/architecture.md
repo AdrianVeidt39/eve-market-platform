@@ -28,6 +28,13 @@ MySQL (recomendado) con tablas:
 - Correlation ID por request (`x-correlation-id`).
 - Logs estructurados (`level`, `message`, `context`).
 - Metricas por llamada ESI: `latencyMs`, `retries`, `cacheHit`.
+- Endpoints operativos: `/health`, `/ready`, `/metrics`.
+
+## Hardening API
+
+- Rate limit global en Fastify (`@fastify/rate-limit`).
+- `bodyLimit` de 1MB para reducir superficie de abuso.
+- Endpoint de historial `GET /v1/market/snapshots?limit=&offset=` para consultas paginadas.
 
 ## Migracion incremental
 

@@ -87,4 +87,25 @@ describe('v1 api', () => {
     const body = response.json() as { data: { ordersCount: number } };
     expect(body.data.ordersCount).toBe(1);
   });
+
+  it('lists snapshots and exposes readiness and metrics', async () => {
+    const create = await app.inject({
+      method: 'POST',
+      url: '/v1/market/snapshots',
+      payload: { regionId: 10000002, constellationId: 20000020 }
+    });
+    expect(create.statusCode).toBe(200);
+
+    const list = await app.inject({ method: 'GET', url: '/v1/market/snapshots?limit=10&offset=0' });
+    expect(list.statusCode).toBe(200);
+    const listBody = list.json() as { data: { items: Array<{ id: string }> } };
+    expect(listBody.data.items.length).toBeGreaterThan(0);
+
+    const ready = await app.inject({ method: 'GET', url: '/ready' });
+    expect(ready.statusCode).toBe(200);
+
+    const metrics = await app.inject({ method: 'GET', url: '/metrics' });
+    expect(metrics.statusCode).toBe(200);
+    expect(metrics.body.includes('eve_api_requests_total')).toBe(true);
+  });
 });

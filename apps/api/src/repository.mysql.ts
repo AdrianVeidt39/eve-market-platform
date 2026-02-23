@@ -145,4 +145,34 @@ export class MysqlRepository implements MarketRepository {
       [entry.correlationId, entry.level, entry.message, JSON.stringify(entry.context ?? {})]
     );
   }
+
+  async listSnapshots(limit: number, offset: number): Promise<SnapshotRecord[]> {
+    const safeLimit = Math.max(1, Math.min(limit, 100));
+    const safeOffset = Math.max(0, offset);
+    const [rows] = await this.pool.query<SnapshotRow[]>(
+      `SELECT id, correlation_id, region_id, constellation_id, created_at, summary
+         FROM snapshots
+        ORDER BY created_at DESC
+        LIMIT ? OFFSET ?`,
+      [safeLimit, safeOffset]
+    );
+
+    return rows.map((row) => ({
+      id: row.id,
+      correlationId: row.correlation_id,
+      regionId: Number(row.region_id),
+      constellationId: Number(row.constellation_id),
+      createdAt:
+        row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
+      summary:
+        typeof row.summary === 'string'
+          ? (JSON.parse(row.summary) as SnapshotRecord['summary'])
+          : (row.summary as SnapshotRecord['summary'])
+    }));
+  }
+
+  async healthCheck(): Promise<{ ok: boolean; mode: 'mysql' }> {
+    await this.pool.query('SELECT 1');
+    return { ok: true, mode: 'mysql' };
+  }
 }

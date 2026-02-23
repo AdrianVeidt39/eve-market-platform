@@ -25,5 +25,7 @@ export type MarketRepository = {
   getSnapshot(
     snapshotId: string
   ): Promise<{ snapshot: SnapshotRecord; orders: SnapshotOrder[] } | null>;
+  listSnapshots(limit: number, offset: number): Promise<SnapshotRecord[]>;
   saveLog(entry: LogEntry): Promise<void>;
+  healthCheck(): Promise<{ ok: boolean; mode: 'mysql' | 'memory' }>;
 };

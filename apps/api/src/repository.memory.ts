@@ -22,4 +22,15 @@ export class MemoryRepository implements MarketRepository {
   async saveLog(entry: LogEntry): Promise<void> {
     this.logs.push(entry);
   }
+
+  async listSnapshots(limit: number, offset: number): Promise<SnapshotRecord[]> {
+    return [...this.snapshots.values()]
+      .map((entry) => entry.snapshot)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(offset, offset + limit);
+  }
+
+  async healthCheck(): Promise<{ ok: boolean; mode: 'memory' }> {
+    return { ok: true, mode: 'memory' };
+  }
 }

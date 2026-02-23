@@ -5,6 +5,26 @@ info:
 servers:
   - url: http://localhost:3001
 paths:
+  /health:
+    get:
+      summary: Liveness check
+      responses:
+        '200':
+          description: OK
+  /ready:
+    get:
+      summary: Readiness check (DB)
+      responses:
+        '200':
+          description: Ready
+        '503':
+          description: Not ready
+  /metrics:
+    get:
+      summary: Metricas de aplicacion (Prometheus text format)
+      responses:
+        '200':
+          description: OK
   /v1/regions:
     get:
       summary: Lista regiones EVE
@@ -36,6 +56,25 @@ paths:
         '200':
           description: OK
   /v1/market/snapshots:
+    get:
+      summary: Lista snapshots persistidos
+      parameters:
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+        - in: query
+          name: offset
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        '200':
+          description: OK
     post:
       summary: Crea snapshot de mercado filtrado por estaciones NPC de constelacion
       requestBody:
