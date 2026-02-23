@@ -239,17 +239,28 @@
 
     <div class="card" style="margin-top:16px">
       <div class="section-title">Órdenes encontradas</div>
-      <div class="controls">
-        <div class="stats">
-          <span class="chip"><span id="ordersCount">0</span> órdenes</span>
-          <span class="chip"><span id="pagesInfo">0 / 0 páginas</span></span>
+        <div class="controls">
+          <div class="stats">
+            <span class="chip"><span id="ordersCount">0</span> órdenes</span>
+            <span class="chip"><span id="pagesInfo">Página 0 de 0</span></span>
+          </div>
+          <div class="right">
+            <span class="chip">Ver
+              <select id="pageSizeSelect" style="margin:0 6px">
+                <option value="100" selected>100</option>
+                <option value="500">500</option>
+                <option value="1000">1000</option>
+              </select>
+              registros
+            </span>
+            <button id="pagePrevBtn" class="btn" disabled>Anterior</button>
+            <span class="chip" id="pageIndicator">0 / 0</span>
+            <button id="pageNextBtn" class="btn" disabled>Siguiente</button>
+            <button id="connectedOrdersBtn" class="btn" disabled>Constelaciones destino</button>
+            <button id="chartsBtn" class="btn" disabled>Generar gráficas</button>
+            <button id="exportBtn" class="btn" disabled>Exportar CSV</button>
+          </div>
         </div>
-        <div class="right">
-          <button id="connectedOrdersBtn" class="btn" disabled>Constelaciones destino</button>
-          <button id="chartsBtn" class="btn" disabled>Generar gráficas</button>
-          <button id="exportBtn" class="btn" disabled>Exportar CSV</button>
-        </div>
-      </div>
       <div class="table-wrap collapsible" data-collapsible>
         <button type="button" class="collapse-toggle" aria-expanded="false">
           <span class="collapse-title">Órdenes</span>
@@ -947,6 +958,10 @@ let baseFetchState={totalPages:0,fetchedPages:0};
 const destinationRegionFetchState=new Map();
 let lastMarketSnapshotId=null;
 window.lastMarketSnapshotId=null;
+let tablePageSize=100;
+let tableCurrentPage=1;
+let tableTotalRows=0;
+let tableTotalPages=0;
 
 function updateRegionNameCache(list){
   if(!Array.isArray(list)) return;
@@ -1961,6 +1976,7 @@ function resetLower(){
 
 async function queryMarket(){
   const regionId=+j('#region').value;
+  tableCurrentPage=1;
   chartsReady=false;
   connectedOrdersRaw=[];
   baseOrdersRaw=[];
@@ -2151,14 +2167,47 @@ function applyFilters(rows,f){
   });
 }
 function getFilteredRows(){ let rows=ordersRaw.map(mapOrder); const f=currentFilters(); rows=applyFilters(rows,f); return sortBy(rows,currentSort.k,currentSort.dir); }
+
+function syncTablePagination(totalRows){
+  tableTotalRows=Number.isFinite(totalRows)&&totalRows>0?totalRows:0;
+  tableTotalPages=tableTotalRows>0?Math.max(1,Math.ceil(tableTotalRows/tablePageSize)):0;
+  if(tableTotalPages===0){
+    tableCurrentPage=1;
+  }else if(tableCurrentPage>tableTotalPages){
+    tableCurrentPage=tableTotalPages;
+  }else if(tableCurrentPage<1){
+    tableCurrentPage=1;
+  }
+  updatePagesSummaryDisplay();
+  updatePaginationControls();
+}
+
+function getCurrentPageRows(rows){
+  if(!Array.isArray(rows)||!rows.length) return [];
+  const start=(tableCurrentPage-1)*tablePageSize;
+  return rows.slice(start,start+tablePageSize);
+}
+
+function updatePaginationControls(){
+  const prevBtn=j('#pagePrevBtn');
+  const nextBtn=j('#pageNextBtn');
+  const indicator=j('#pageIndicator');
+  const hasRows=tableTotalPages>0;
+  if(prevBtn) prevBtn.disabled=!hasRows||tableCurrentPage<=1;
+  if(nextBtn) nextBtn.disabled=!hasRows||tableCurrentPage>=tableTotalPages;
+  if(indicator) indicator.textContent=hasRows?`${fmtInt(tableCurrentPage)} / ${fmtInt(tableTotalPages)}`:'0 / 0';
+}
+
 function render(){
   const tbody=j('#ordersTable tbody');
   const rows=getFilteredRows();
+  syncTablePagination(rows.length);
+  const pageRows=getCurrentPageRows(rows);
   updateOrdersCountDisplay(rows.length);
   const disable=rows.length===0;
   j('#exportBtn').disabled=disable;
   j('#chartsBtn').disabled=disable;
-  tbody.innerHTML=rows.map(r=>`<tr><td>${escapeHtml(r.type_name)}</td><td>${r.order_type==='sell'?'Venta':'Compra'}</td><td>${fmtPrice(r.price)}</td><td>${fmtInt(r.volume_remain)}</td><td>${fmtInt(r.min_volume)}</td><td>${r.range}</td><td>${escapeHtml(r.system_name)}</td><td>${escapeHtml(r.constellation_name)}</td><td>${escapeHtml(r.region_name)}</td><td>${escapeHtml(r.station_name)}</td><td><span class="muted" title="${r.issued}">${escapeHtml(r.issued)}</span></td><td>${r.duration}</td></tr>`).join('');
+  tbody.innerHTML=pageRows.map(r=>`<tr><td>${escapeHtml(r.type_name)}</td><td>${r.order_type==='sell'?'Venta':'Compra'}</td><td>${fmtPrice(r.price)}</td><td>${fmtInt(r.volume_remain)}</td><td>${fmtInt(r.min_volume)}</td><td>${r.range}</td><td>${escapeHtml(r.system_name)}</td><td>${escapeHtml(r.constellation_name)}</td><td>${escapeHtml(r.region_name)}</td><td>${escapeHtml(r.station_name)}</td><td><span class="muted" title="${r.issued}">${escapeHtml(r.issued)}</span></td><td>${r.duration}</td></tr>`).join('');
   updateConnectedButtonState();
   updateStargateBubble(rows);
   renderSystemsTable();
@@ -2215,32 +2264,11 @@ function resetFetchStates(){
 function updatePagesSummaryDisplay(){
   const info=j('#pagesInfo');
   if(!info) return;
-  let total=0;
-  let fetched=0;
-  const baseTotal=Number.isFinite(baseFetchState.totalPages)&&baseFetchState.totalPages>0
-    ? baseFetchState.totalPages
-    : 0;
-  const baseFetched=Number.isFinite(baseFetchState.fetchedPages)&&baseFetchState.fetchedPages>0
-    ? Math.min(baseFetchState.fetchedPages, baseTotal||baseFetchState.fetchedPages)
-    : 0;
-  total+=baseTotal||baseFetched;
-  fetched+=baseFetched;
-  const regionIds=getSelectedDestinationRegionIds();
-  regionIds.forEach(regionId=>{
-    const state=destinationRegionFetchState.get(regionId);
-    if(!state) return;
-    const stateTotal=Number.isFinite(state.totalPages)&&state.totalPages>0?state.totalPages:0;
-    const stateFetched=Number.isFinite(state.fetchedPages)&&state.fetchedPages>0
-      ? Math.min(state.fetchedPages, stateTotal||state.fetchedPages)
-      : 0;
-    total+=stateTotal||stateFetched;
-    fetched+=stateFetched;
-  });
-  if(total<=0){
-    info.textContent='0 / 0 páginas';
-  }else{
-    info.textContent=`${fmtInt(fetched)} / ${fmtInt(total)} páginas`;
+  if(tableTotalPages<=0){
+    info.textContent='Página 0 de 0';
+    return;
   }
+  info.textContent=`Página ${fmtInt(tableCurrentPage)} de ${fmtInt(tableTotalPages)}`;
 }
 
 function getTotalOrdersCount(){
@@ -3356,6 +3384,22 @@ j('#region').addEventListener('change',onRegionChange);
 j('#constellation').addEventListener('change',onConstellationChange);
 j('#queryBtn').addEventListener('click',queryMarket);
 j('#exportBtn').addEventListener('click',exportCSV);
+j('#pageSizeSelect').addEventListener('change',()=>{
+  const next=Number(j('#pageSizeSelect').value);
+  tablePageSize=Number.isFinite(next)&&next>0?next:100;
+  tableCurrentPage=1;
+  render();
+});
+j('#pagePrevBtn').addEventListener('click',()=>{
+  if(tableCurrentPage<=1) return;
+  tableCurrentPage-=1;
+  render();
+});
+j('#pageNextBtn').addEventListener('click',()=>{
+  if(tableTotalPages<=0 || tableCurrentPage>=tableTotalPages) return;
+  tableCurrentPage+=1;
+  render();
+});
 j('#chartsBtn').addEventListener('click',()=>{
   generateCharts().catch(err=>{ logError(err); alert('Error al generar las gráficas. Inténtalo de nuevo.'); });
 });
