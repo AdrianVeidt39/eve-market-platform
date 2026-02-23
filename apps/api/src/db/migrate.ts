@@ -7,6 +7,13 @@ import type { RowDataPacket } from 'mysql2';
 
 type MigrationRow = RowDataPacket & { version: string };
 
+function splitSqlStatements(sql: string): string[] {
+  return sql
+    .split(';')
+    .map((statement) => statement.trim())
+    .filter((statement) => statement.length > 0);
+}
+
 async function main(): Promise<void> {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
@@ -35,7 +42,18 @@ async function main(): Promise<void> {
     for (const file of migrationFiles) {
       if (applied.has(file)) continue;
       const sql = await readFile(path.join(migrationsDir, file), 'utf8');
-      await connection.query(sql);
+      const statements = splitSqlStatements(sql);
+      for (const statement of statements) {
+        try {
+          await connection.query(statement);
+        } catch (error) {
+          const dbError = error as { code?: string };
+          if (dbError.code === 'ER_DUP_KEYNAME') {
+            continue;
+          }
+          throw error;
+        }
+      }
       await connection.execute('INSERT INTO schema_migrations(version) VALUES (?)', [file]);
     }
 
