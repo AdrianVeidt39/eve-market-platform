@@ -32,13 +32,30 @@ const snapshotListQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).default(0)
 });
 
+type SnapshotJob = {
+  id: string;
+  correlationId: string;
+  regionId: number;
+  constellationId: number;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  createdAt: string;
+  startedAt?: string;
+  finishedAt?: string;
+  snapshotId?: string;
+  error?: string;
+};
+
 export function buildServer(options?: { repository?: MarketRepository; esiClient?: EsiClient }) {
   const config = loadConfig();
   const repository =
     options?.repository ??
     (config.databaseUrl ? new MysqlRepository(config.databaseUrl) : new MemoryRepository());
 
-  const app = Fastify({ logger: true, bodyLimit: 1_048_576 });
+  const app = Fastify({
+    logger: true,
+    bodyLimit: 1_048_576,
+    routerOptions: { ignoreTrailingSlash: true }
+  });
   const metrics = {
     requestsTotal: 0,
     requestsErrors: 0,
@@ -71,6 +88,43 @@ export function buildServer(options?: { repository?: MarketRepository; esiClient
         );
       }
     });
+
+  const snapshotJobs = new Map<string, SnapshotJob>();
+  const snapshotQueue: string[] = [];
+  let processingSnapshotQueue = false;
+
+  const processSnapshotQueue = async () => {
+    if (processingSnapshotQueue) return;
+    processingSnapshotQueue = true;
+    try {
+      while (snapshotQueue.length > 0) {
+        const jobId = snapshotQueue.shift();
+        if (!jobId) continue;
+        const job = snapshotJobs.get(jobId);
+        if (!job || job.status !== 'queued') continue;
+
+        job.status = 'running';
+        job.startedAt = new Date().toISOString();
+
+        try {
+          const result = await marketService.buildSnapshot({
+            regionId: job.regionId,
+            constellationId: job.constellationId,
+            correlationId: job.correlationId
+          });
+          job.status = 'completed';
+          job.snapshotId = result.snapshot.id;
+          job.finishedAt = new Date().toISOString();
+        } catch (error) {
+          job.status = 'failed';
+          job.error = error instanceof Error ? error.message : String(error);
+          job.finishedAt = new Date().toISOString();
+        }
+      }
+    } finally {
+      processingSnapshotQueue = false;
+    }
+  };
 
   const marketService = new MarketService(esiClient, repository);
 
@@ -242,6 +296,38 @@ export function buildServer(options?: { repository?: MarketRepository; esiClient
     }
   });
 
+  app.post('/v1/market/snapshot-jobs', async (request, reply) => {
+    const parsed = snapshotBodySchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'invalid_payload', details: parsed.error.flatten() });
+    }
+
+    const correlationId = request.headers['x-correlation-id'] as string;
+    const job: SnapshotJob = {
+      id: randomUUID(),
+      correlationId,
+      regionId: parsed.data.regionId,
+      constellationId: parsed.data.constellationId,
+      status: 'queued',
+      createdAt: new Date().toISOString()
+    };
+
+    snapshotJobs.set(job.id, job);
+    snapshotQueue.push(job.id);
+    void processSnapshotQueue();
+
+    return reply.code(202).send({ data: job });
+  });
+
+  app.get('/v1/market/snapshot-jobs/:jobId', async (request, reply) => {
+    const params = request.params as { jobId: string };
+    const job = snapshotJobs.get(params.jobId);
+    if (!job) {
+      return reply.code(404).send({ error: 'snapshot_job_not_found' });
+    }
+    return { data: job };
+  });
+
   app.get('/v1/market/snapshots', async (request, reply) => {
     const parsed = snapshotListQuerySchema.safeParse(request.query ?? {});
     if (!parsed.success) {
@@ -292,6 +378,68 @@ export function buildServer(options?: { repository?: MarketRepository; esiClient
       context: parsed.data.context
     });
     return reply.code(202).send({ ok: true });
+  });
+
+  app.get('/v1/universe/constellations/:id', async (request, reply) => {
+    const params = request.params as { id: string };
+    const id = Number(params.id);
+    if (!Number.isFinite(id)) return reply.code(400).send({ error: 'invalid_id' });
+    const response = await esiClient.get<unknown>(`/universe/constellations/${id}/`, {
+      correlationId: request.headers['x-correlation-id'] as string,
+      cacheKey: `esi:universe:constellation:${id}`
+    });
+    return response.data;
+  });
+
+  app.get('/v1/universe/systems/:id', async (request, reply) => {
+    const params = request.params as { id: string };
+    const id = Number(params.id);
+    if (!Number.isFinite(id)) return reply.code(400).send({ error: 'invalid_id' });
+    const response = await esiClient.get<unknown>(`/universe/systems/${id}/`, {
+      correlationId: request.headers['x-correlation-id'] as string,
+      cacheKey: `esi:universe:system:${id}`
+    });
+    return response.data;
+  });
+
+  app.get('/v1/universe/stargates/:id', async (request, reply) => {
+    const params = request.params as { id: string };
+    const id = Number(params.id);
+    if (!Number.isFinite(id)) return reply.code(400).send({ error: 'invalid_id' });
+    const response = await esiClient.get<unknown>(`/universe/stargates/${id}/`, {
+      correlationId: request.headers['x-correlation-id'] as string,
+      cacheKey: `esi:universe:stargate:${id}`
+    });
+    return response.data;
+  });
+
+  app.post('/v1/universe/names', async (request) => {
+    const body = request.body as number[];
+    const response = await esiClient.post<unknown>('/universe/names/', body, {
+      correlationId: request.headers['x-correlation-id'] as string,
+      dedupeKey: `esi:universe:names:${JSON.stringify(body ?? [])}`
+    });
+    return response.data;
+  });
+
+  app.get('/v1/markets/:regionId/orders', async (request, reply) => {
+    const params = request.params as { regionId: string };
+    const query = request.query as { page?: string; order_type?: string };
+    const regionId = Number(params.regionId);
+    const page = Number(query.page ?? '1');
+    const orderType = query.order_type ?? 'all';
+    if (!Number.isFinite(regionId) || !Number.isFinite(page)) {
+      return reply.code(400).send({ error: 'invalid_params' });
+    }
+
+    const path = `/markets/${regionId}/orders/?order_type=${encodeURIComponent(orderType)}&page=${page}`;
+    const response = await esiClient.get<unknown>(path, {
+      correlationId: request.headers['x-correlation-id'] as string,
+      cacheKey: `esi:markets:${regionId}:orderType:${orderType}:page:${page}`,
+      cacheTtlMs: 10_000
+    });
+    if (response.pages > 0) reply.header('x-pages', String(response.pages));
+    return response.data;
   });
 
   app.get('/v1/esi/*', async (request, reply) => {

@@ -55,6 +55,12 @@ Endpoints operativos:
 - `GET /ready`
 - `GET /metrics`
 
+Flujo principal de mercado:
+
+- `POST /v1/market/snapshot-jobs`
+- `GET /v1/market/snapshot-jobs/:jobId`
+- `GET /v1/market/snapshots/:snapshotId`
+
 ## Calidad y CI
 
 ```bash

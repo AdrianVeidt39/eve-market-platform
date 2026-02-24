@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, it } from 'vitest';
+import { setTimeout as sleep } from 'node:timers/promises';
 
 import { EsiClient } from '@eve/esi-client';
 
@@ -107,5 +108,44 @@ describe('v1 api', () => {
     const metrics = await app.inject({ method: 'GET', url: '/metrics' });
     expect(metrics.statusCode).toBe(200);
     expect(metrics.body.includes('eve_api_requests_total')).toBe(true);
+  });
+
+  it('supports domain ESI endpoints and async snapshot jobs', async () => {
+    const system = await app.inject({ method: 'GET', url: '/v1/universe/systems/30000142' });
+    expect(system.statusCode).toBe(200);
+
+    const names = await app.inject({
+      method: 'POST',
+      url: '/v1/universe/names',
+      payload: [10000002]
+    });
+    expect(names.statusCode).toBe(200);
+
+    const create = await app.inject({
+      method: 'POST',
+      url: '/v1/market/snapshot-jobs',
+      payload: { regionId: 10000002, constellationId: 20000020 }
+    });
+    expect(create.statusCode).toBe(202);
+    const created = create.json() as { data: { id: string } };
+    const jobId = created.data.id;
+
+    let completed = false;
+    for (let i = 0; i < 15; i += 1) {
+      const status = await app.inject({ method: 'GET', url: `/v1/market/snapshot-jobs/${jobId}` });
+      expect(status.statusCode).toBe(200);
+      const payload = status.json() as { data: { status: string; snapshotId?: string } };
+      if (payload.data.status === 'completed') {
+        expect(typeof payload.data.snapshotId).toBe('string');
+        completed = true;
+        break;
+      }
+      if (payload.data.status === 'failed') {
+        throw new Error('snapshot job failed in test');
+      }
+      await sleep(25);
+    }
+
+    expect(completed).toBe(true);
   });
 });

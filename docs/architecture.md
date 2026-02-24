@@ -40,7 +40,7 @@ MySQL (recomendado) con tablas:
 
 - Fase 1 (completada): backend + proxy `/v1/esi/*`, frontend existente deja de llamar ESI directo.
 - Fase 2 (en progreso): mover UI desde `client/` a `apps/web` por modulos.
-- Fase 3 (parcial): flujo principal (`region -> constellation -> snapshot`) usa endpoints de dominio `/v1/*`; el proxy `/v1/esi/*` queda para compatibilidad de funcionalidades secundarias.
+- Fase 3 (avanzada): frontend consume endpoints de dominio `/v1/*` (universe + markets + snapshot jobs); `/v1/esi/*` queda solo como fallback de compatibilidad.
 
 ## Rendimiento SQL
 

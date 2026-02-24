@@ -40,6 +40,13 @@
   .section-title{font-weight:700;margin:18px 0 10px}
   .stats{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:12px}
   .chip{background:var(--chip);border:1px solid var(--border);padding:6px 10px;border-radius:999px}
+  .pager-group{display:flex;align-items:center;gap:8px;background:var(--chip);border:1px solid var(--border);border-radius:999px;padding:4px 8px}
+  .pager-size{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:12px;white-space:nowrap}
+  .pager-size select{width:auto;min-width:78px;padding:6px 10px;border-radius:8px;background:#0c131c;border:1px solid var(--border);font-size:12px}
+  .pager-btn{background:#182536;color:var(--text);border:1px solid var(--border);border-radius:999px;padding:6px 12px;font-weight:600;cursor:pointer;font-size:12px}
+  .pager-btn:hover{border-color:var(--accent);background:#203149}
+  .pager-btn:disabled{opacity:.55;cursor:not-allowed}
+  .pager-indicator{min-width:64px;text-align:center;font-size:12px}
   .table-wrap{overflow:auto;border:1px solid var(--border);border-radius:12px;background:var(--panel)}
   .table-wrap.collapsible{overflow:hidden;padding:0}
   .table-wrap.collapsible .collapse-content{display:none;border-top:1px solid var(--border);overflow:auto;background:var(--panel)}
@@ -62,7 +69,7 @@
   thead tr.filters input, thead tr.filters select{width:100%;margin:0}
   tbody td{border-top:1px solid var(--border);padding:10px 12px;vertical-align:top}
   tbody tr:hover{background:#111a27}
-  .right{display:flex;gap:8px;align-items:center;margin-left:auto}
+  .right{display:flex;gap:8px;align-items:center;margin-left:auto;flex-wrap:wrap;justify-content:flex-end}
   .spinner{width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
   .muted{color:var(--muted)}
@@ -245,17 +252,19 @@
             <span class="chip"><span id="pagesInfo">Página 0 de 0</span></span>
           </div>
           <div class="right">
-            <span class="chip">Ver
-              <select id="pageSizeSelect" style="margin:0 6px">
-                <option value="100" selected>100</option>
-                <option value="500">500</option>
-                <option value="1000">1000</option>
-              </select>
-              registros
-            </span>
-            <button id="pagePrevBtn" class="btn" disabled>Anterior</button>
-            <span class="chip" id="pageIndicator">0 / 0</span>
-            <button id="pageNextBtn" class="btn" disabled>Siguiente</button>
+            <div class="pager-group">
+              <label class="pager-size" for="pageSizeSelect">Ver
+                <select id="pageSizeSelect">
+                  <option value="100" selected>100</option>
+                  <option value="500">500</option>
+                  <option value="1000">1000</option>
+                </select>
+                registros
+              </label>
+              <button id="pagePrevBtn" class="pager-btn" disabled>Anterior</button>
+              <span class="chip pager-indicator" id="pageIndicator">0 / 0</span>
+              <button id="pageNextBtn" class="pager-btn" disabled>Siguiente</button>
+            </div>
             <button id="connectedOrdersBtn" class="btn" disabled>Constelaciones destino</button>
             <button id="chartsBtn" class="btn" disabled>Generar gráficas</button>
             <button id="exportBtn" class="btn" disabled>Exportar CSV</button>
@@ -334,7 +343,7 @@
   </div>
 
 <script>
-const ESI = '/v1/esi';
+const ESI = '/v1';
 const APP_VERSION = '1.0.0';
 const USER_AGENT = `EVE Market Explorer/${APP_VERSION} (leo.devo@live.com.mx)`;
 const ESI_COMPATIBILITY_DATE = '2026-02-19';
@@ -2002,9 +2011,7 @@ async function queryMarket(){
   const prevDisplay=busy?busy.style.display:null;
   if(busy) busy.style.display='flex';
   try{
-    const snapshotResult=await persistMarketSnapshot(regionId,currentConstellationId);
-    const snapshotId=snapshotResult?.data?.snapshot?.id;
-    if(!snapshotId) throw new Error('No se recibio snapshotId desde /v1/market/snapshots');
+    const snapshotId=await createSnapshotJobAndWait(regionId,currentConstellationId);
     const {data:snapshotPayload}=await get(`/v1/market/snapshots/${snapshotId}`);
     const snapshotOrders=Array.isArray(snapshotPayload?.data?.orders)?snapshotPayload.data.orders:[];
     baseOrdersRaw=snapshotOrders.map(o=>({
@@ -2034,10 +2041,10 @@ async function queryMarket(){
   }
 }
 
-async function persistMarketSnapshot(regionId,constellationId){
+async function createSnapshotJobAndWait(regionId,constellationId){
   if(!Number.isFinite(regionId) || !Number.isFinite(constellationId)) return;
   try{
-    const response=await fetch('/v1/market/snapshots',{
+    const response=await fetch('/v1/market/snapshot-jobs',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({regionId,constellationId})
@@ -2055,16 +2062,37 @@ async function persistMarketSnapshot(regionId,constellationId){
           }
         }
       }catch{}
-      throw new Error(`HTTP ${response.status} /v1/market/snapshots ${detail}`.trim());
+      throw new Error(`HTTP ${response.status} /v1/market/snapshot-jobs ${detail}`.trim());
     }
     const payload=await response.json();
-    const snapshotId=payload?.data?.snapshot?.id;
-    if(snapshotId){
-      lastMarketSnapshotId=snapshotId;
-      window.lastMarketSnapshotId=snapshotId;
+    const jobId=payload?.data?.id;
+    if(!jobId) throw new Error('No se recibio jobId para snapshot');
+
+    let attempts=0;
+    while(attempts<180){
+      attempts+=1;
+      await sleep(500);
+      const statusRes=await fetch(`/v1/market/snapshot-jobs/${encodeURIComponent(jobId)}`);
+      if(!statusRes.ok){
+        throw new Error(`HTTP ${statusRes.status} /v1/market/snapshot-jobs/${jobId}`);
+      }
+      const statusPayload=await statusRes.json();
+      const status=statusPayload?.data?.status;
+      if(status==='completed'){
+        const snapshotId=statusPayload?.data?.snapshotId;
+        if(!snapshotId) throw new Error('Snapshot job completado sin snapshotId');
+        lastMarketSnapshotId=snapshotId;
+        window.lastMarketSnapshotId=snapshotId;
+        logInfo('[API] Snapshot de mercado guardado',snapshotId);
+        return snapshotId;
+      }
+      if(status==='failed'){
+        const reason=statusPayload?.data?.error||'snapshot_job_failed';
+        throw new Error(`Snapshot job fallo: ${reason}`);
+      }
     }
-    logInfo('[API] Snapshot de mercado guardado',snapshotId||'sin-id');
-    return payload;
+
+    throw new Error('Timeout esperando snapshot job');
   }catch(error){
     const msg=error&&error.message?error.message:String(error);
     logWarn('[API] No se pudo guardar snapshot de mercado',msg);

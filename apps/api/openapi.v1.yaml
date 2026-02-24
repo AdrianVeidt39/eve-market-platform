@@ -92,6 +92,38 @@ paths:
       responses:
         '200':
           description: Snapshot creado
+  /v1/market/snapshot-jobs:
+    post:
+      summary: Crea un job asincrono para generar snapshot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [regionId, constellationId]
+              properties:
+                regionId:
+                  type: integer
+                constellationId:
+                  type: integer
+      responses:
+        '202':
+          description: Job en cola
+  /v1/market/snapshot-jobs/{jobId}:
+    get:
+      summary: Consulta estado del job de snapshot
+      parameters:
+        - in: path
+          name: jobId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Estado del job
+        '404':
+          description: No encontrado
   /v1/market/snapshots/{snapshotId}:
     get:
       summary: Obtiene snapshot persistido
@@ -118,6 +150,68 @@ paths:
       responses:
         '202':
           description: Accepted
+  /v1/universe/constellations/{id}:
+    get:
+      summary: Detalle de constelacion
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+  /v1/universe/systems/{id}:
+    get:
+      summary: Detalle de sistema
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+  /v1/universe/stargates/{id}:
+    get:
+      summary: Detalle de stargate
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: OK
+  /v1/universe/names:
+    post:
+      summary: Resolve IDs a nombres
+      responses:
+        '200':
+          description: OK
+  /v1/markets/{regionId}/orders:
+    get:
+      summary: Ordenes de mercado por region y pagina
+      parameters:
+        - in: path
+          name: regionId
+          required: true
+          schema:
+            type: integer
+        - in: query
+          name: page
+          schema:
+            type: integer
+        - in: query
+          name: order_type
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
   /v1/esi/{path}:
     get:
       summary: Proxy ESI (compatibilidad incremental)
